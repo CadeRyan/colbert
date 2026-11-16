@@ -1,0 +1,8 @@
+colbert
+sieve
+*.o
+src/kernels.inc
+*.ckpt
+*.tmp
+results.jsonl
+runs/
