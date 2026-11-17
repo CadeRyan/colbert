@@ -48,10 +48,23 @@ Sieved to p <= 10^9 (50,845,272 primes, 36 minutes on 2 cores). The list is in
 | all | | 259,990 | 0.2701 |
 
 "Expected primes" is the Mertens heuristic `e^γ ln(p) / ln(N)` summed over candidates; it
-does not depend on sieve depth. Scaled to an assumed deep-sieve depth of 1.4·10^17 the
-range holds about 136,000 tests, i.e. about 505,000 tests per expected prime.
+does not depend on sieve depth.
+
+**Correction (17 Nov 2026).** The 45.5M lower limit came from a search-engine snippet.
+PrimeGrid's live status page shows the SoB leading edge at **n = 47,856,007** (minimum
+remaining n 47,200,294), so most of the first 2.4M of this list has already been tested by
+PrimeGrid. Restricted to n ≥ 47,856,007:
+
+| | value |
+|---|---|
+| candidates surviving p ≤ 10^9 | 208,912 (21181: 49,466; 22699: 20,286; 24737: 52,014; 55459: 69,593; 67607: 17,553) |
+| expected after a deep sieve to ~1.4·10^17 (assumed depth) | ~109,700 tests |
+| expected primes, n in [47.86M, 57.5M] | 0.212 (19% chance of at least one) |
+| tests per expected prime | ~518,000 |
 
 Reproduce with:
 
     ./sieve 45500000 57500000 1e9 candidates.txt
     tools/cost_model.py candidates.txt --psieve 1e9 --pdeep 1.4e17 --ms-per-iter 0.15 0.5 1.5 --usd-per-hour 0.25
+
+For the post-wavefront figures, first keep only lines with `n >= 47856007`.

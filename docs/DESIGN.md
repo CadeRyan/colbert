@@ -19,12 +19,12 @@ answers both cost about a factor of two:
 
 | approach | used by | what it costs |
 |---|---|---|
-| zero-padded transform, then reduce | proth20 (GPU); gwnum/LLR for large `k` | transform of twice the length |
-| IBDWT with `k` folded into floating-point weights | gwnum/LLR for small `k` | the convolution output is `k` times larger, so each double holds `log2(k)/2` fewer bits: about 10 bits per word instead of 18 for the `k` in question |
+| zero-padded transform, then reduce | proth20 (GPU); gwnum/LLR for very large `k` | transform of twice the length |
+| IBDWT with `k` in the floating-point weights (Percival 2002; Woltman's "1/k" method) | gwnum → LLR2/PRST (CPU, what PrimeGrid runs); llrCUDA (GPU, FP64) | the convolution output is `k` times larger, so each double holds about `log2(k)/2` fewer bits. PrimeGrid's SoB tasks at n ≈ 31M used FFT lengths 2560K–2880K: about **10.8 bits per double**, against ~18–19 for a Mersenne number of that size |
 
-`colbert` removes that factor by doing the weighted transform **exactly**, in a field where
-the weights exist for every `k`, and where 92 bits of headroom make the extra `log2 k ≈ 16`
-bits a small fraction of the budget rather than most of it.
+`colbert` keeps the no-padding structure of the second row but does the weighted transform
+**exactly**, in a field where the weights exist for every `k`, and where 92 bits of headroom
+make the extra `log2 k ≈ 16` bits a small fraction of the budget rather than most of it.
 
 ## 2. Representation
 
@@ -58,7 +58,8 @@ is. **The transform therefore computes `x ∘ y := k·x·y mod P`.** That is har
 is an isomorphism from `(Z/P, ∘)` to `(Z/P, ·)`, so squaring chains, products and the
 Gerbicz check all go through unchanged in `∘`-arithmetic; one multiplication by `k` at the
 very end converts back. (The Proth test starts from `x_0 = a^k / k = −2^n a^k` and declares
-`P` prime iff `x_{n−1} ≡ 2^n`.)
+`P` prime iff `x_{n−1} ≡ 2^n`.) This is the same device as George Woltman's "1/k format" in
+gwnum, where residues are stored pre-multiplied by `1/k`; it is not new here.
 
 Now let `F` be a field containing an element `θ` with `θ^N = c := −k·2^n`, and set
 `a_j = 2^{s_j} θ^{−j}`. Then `a_i a_j / a_m` equals `2^e` without wrap and `−2^{e'}/k` with
@@ -78,10 +79,12 @@ Take `q = 2^e − 1` prime (`e = 61` and `e = 31`) and `F = GF(q²) = GF(q)[i]`.
 * The norm map `h ↦ h^{q+1}` is onto `GF(q)*`. So for **any** `c ∈ GF(q)*`: pick `h` with
   `h·conj(h) = c` (solve `a² + b² = c`), and `θ = h^{(q+1)/N}` satisfies `θ^N = c`.
 
-The second point is the heart of it. In the real numbers `−k·2^n` has no real `N`-th root at
-all; in a prime field `GF(p)` with `p ≡ 1 mod N` it has one only for a fraction `1/N` of
-primes. In `GF(q²)` over a Mersenne prime it always has one. (That 2 has such roots is what
-PRPLL's Mersenne NTT uses; the observation here is that nothing is special about 2.)
+The second point is the heart of it. In the real numbers `−k·2^n` has no real `N`-th root
+(floating-point codes use complex weights instead). In a prime field `GF(p)` with
+`p ≡ 1 mod N` it has one only for about a fraction `1/N` of primes, so an implementation
+would have to hunt for suitable primes for each `(k, n)`. In `GF(q²)` over a Mersenne prime
+it always has one. (That 2 has such roots is what Mersenne-only codes in these fields rely
+on; the observation here is that nothing is special about 2.)
 
 Multiplication by powers of two is a rotation in these fields, and reduction mod `2^e − 1`
 is a shift and an add, which is why they are the fields of choice for exact GPU transforms.
@@ -101,7 +104,10 @@ half-length structure works depends on whether `c = −k·2^n` is a square in `G
 | 67607 | −1 real   | +1 fold   |
 
 Both structures occur for the remaining Sierpiński `k`, in different combinations, so both
-are implemented and each prime picks its own.
+are implemented and each prime picks its own. Both structures themselves are Crandall's
+(1999 "fast Galois transform" paper: the "nested-complex" real-signal transform and the
+"folded-complex" right-angle transform). What is added here is the twist: the fold uses an
+`N`-th root of `−k·2^n` instead of an `N`-th root of `−1`.
 
 **Fold** (`c` a non-residue). `γ = θ^{−N/2}` satisfies `γ² = 1/c`, hence `γ = g·i` is purely
 imaginary. With `M = N/2`, the real polynomial `Σ 2^{s_j} x_j Y^j` reduced mod `Y^M − γ` is
@@ -134,15 +140,18 @@ by Cauchy–Schwarz. `Layout` evaluates the right-hand side for the actual word 
 refuses any configuration where it reaches `Q/2`. No input can overflow; there is no
 round-off to watch. Roughly: `2β + log2 N + log2 k < 91.9`.
 
-| what | bits per word at n ≈ 46M, k ≈ 2^16 | transform size |
-|---|---|---|
-| this work, 92-bit exact | up to 27.4 (21.9 at the power-of-two size used today) | 2^21 words |
-| proth20 (zero-padded, two 31-bit primes) | 19 | 2^23 words |
-| double-precision IBDWT, `k` in the weights | about 10 | about 4.5M words |
+At the SoB leading edge (n = 47,856,007, k = 21181), from `tools/perf_model.py`:
+
+| what | words | bits per word | transform data per squaring |
+|---|---|---|---|
+| this work, power-of-two sizes (today) | 2^21 | 22.8 | 24.0 MiB |
+| this work, mixed-radix sizes (not yet written) | 7·2^18 | 26.1 | 21.0 MiB |
+| proth20 (zero-padded, two 31-bit primes) | 2^23 points | 19 per input digit, padded 2× and rounded to a power of two | 64.0 MiB |
+| double-precision IBDWT, `k` in the weights (gwnum, llrCUDA) | ~4.4M doubles | ~10.8 (observed by PrimeGrid) | ~33.8 MiB |
 
 proth20's figure comes from its own sizing code (`transformSize`/`digitBit` in `gpmp.h`);
-the double-precision figure is the same bound applied to a 53-bit mantissa and is an
-estimate, not a measurement of LLR.
+the double-precision figure scales PrimeGrid's published SoB FFT lengths to this `n`.
+See [PERFORMANCE.md](PERFORMANCE.md) for what these sizes mean for speed.
 
 ## 7. Carry
 
@@ -168,24 +177,32 @@ and still produce the correct residue.
 
 ## 9. What is new, and what is not
 
-Not new: the IBDWT (Crandall–Fagin); transforms over `GF(q²)` for Mersenne `q` (long known,
-and what PRPLL's NTT modes use for Mersenne numbers); the Proth test; Gerbicz–Li checking;
-the conjugate-pair real transform; block-parallel carries.
+Short version, with sources in [NOVELTY.md](NOVELTY.md):
 
-New as far as I can determine: using the surjectivity of the norm map on `GF(q²)` to get
-IBDWT weights for a general multiplier `k`, giving a zero-padding-free exact transform for
-`k·2^n + 1`; the `∘`-arithmetic formulation that makes the `1/k` wrap integral; the
-per-prime choice between the fold and real structures by `(k/q)`; and a rigorous overflow
-bound for it. I looked at the two closest programs directly: proth20 zero-pads, and PRPLL
-(checked at its head commit of 16 November 2026) rejects everything that is not a Mersenne
-number. I could not search the mersenneforum or PrimeGrid forums from this environment, so
-"new" means "not in the code I could read", not "certainly never proposed".
+| ingredient | first done by |
+|---|---|
+| irrational-base DWT, no padding (Mersenne) | Crandall & Fagin 1994 |
+| no-padding DWT for `k·2^n ± 1`, floating point | Percival 2002; used in gwnum (Woltman) and llrCUDA |
+| storing residues as `x/k` so products come out as `k·x·y` | Woltman, gwnum "1/k format" |
+| transforms over `GF(q²)`, `q` Mersenne; real-signal and right-angle "folded" variants | Crandall 1999 ("fast Galois transform") |
+| the `GF(M61²) × GF(M31²)` pair with CRT | Gallot (genefer22 design code, for `b^(2^m)+1`); PRPLL's M31+M61 NTT (Mersenne only) |
+| Gerbicz–Li checking | Gerbicz; Li |
+| **the Percival/Woltman DWT for `k·2^n+1` done exactly in `GF(q²)`, using the norm map to get an `N`-th root of `−k·2^n` for every `k`** | **not found in any source I could read; Gallot wrote in 2024 that no fast NTT algorithm for `k·b^n ± 1` exists** |
+| per-prime choice of real vs folded structure by the Legendre symbol `(k/q)` | follows from the above |
+| a rigorous worst-case overflow bound for that transform, enforced at run time | follows from the above |
+
+So this is an adaptation of known techniques, not new mathematics. The one step I could
+not find anywhere connects two existing lines of work. Percival's no-padding transform for
+`k·2^n+1` had only been done in floating point. Exact Mersenne-field transforms had only
+been used for moduli whose weights are powers of 2, and for those weights roots are easy.
 
 ## 10. Known limits and next steps
 
-* Power-of-two sizes only. At `n ≈ 46M` that wastes about 20% (21.9 of a possible 27.4 bits
-  per word). Radices 3, 7 and 11 divide both `M31 − 1` and `M61 − 1` and would close the gap.
+* Power-of-two sizes only. At the leading edge that costs about 14% (22.8 bits per word
+  instead of 26.1). The odd factors of `gcd(M31 − 1, M61 − 1)` are 3², 7, 11, 31, 151 and 331,
+  so sizes like `7·2^18` are available once radix-3/7 passes are written.
 * The OpenCL kernels are written for correctness: radix-16 passes with one table read per
   butterfly, nothing fused. They have only ever run on a CPU OpenCL runtime. Real GPU speed
   is unmeasured.
-* No P−1 stage and no Pietrzak proof generation yet.
+* No P−1 stage and no Pietrzak proof generation yet. A proof would let a project skip the
+  double-check, which is worth about a factor of 2 in throughput, as much as the transform.
