@@ -261,6 +261,11 @@ def cmd_assemble(args):
     out = os.path.join(OUT, name)
     run(["ffmpeg", "-y", "-v", "error", "-i", vid, "-i", final_audio, "-map", "0:v", "-map", "1:a", "-c:v", "copy", "-c:a", "copy",
          "-movflags", "+faststart", "-shortest", out])
+    if not args.preview:
+        web = os.path.splitext(out)[0] + "_web.mp4"
+        run(["ffmpeg", "-y", "-v", "error", "-i", out, "-vf", "hqdn3d=1.5:1.5:6:6", "-c:v", "libx264", "-preset", "medium", "-crf", "21",
+             "-pix_fmt", "yuv420p", "-c:a", "copy", "-movflags", "+faststart", web])
+        print(f"wrote {web}  ({os.path.getsize(web) / 1e6:.0f} MB, for sharing; upload the full-quality file to YouTube)")
     st = [(sid, start, d) for sid, _, start, d in items]
     base = os.path.splitext(out)[0]
     open(base + ".srt", "w").write(captions(st))
@@ -277,9 +282,8 @@ def cmd_thumbnail(args):
     from toon.render import still
     from toon import scenes as S
     os.environ["COLBERT_VO_DIR"] = os.path.abspath(args.vo)
-    sc = S.BY_ID["01_cold_open"]()
     path = os.path.join(OUT, "thumbnail.png")
-    still("ColdOpen", sc.b(2, 0.95), path, scale=1.0)
+    still("Thumbnail", 0.0, path, scale=1.0)
     print("wrote", path)
 
 

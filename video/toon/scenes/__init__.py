@@ -16,4 +16,6 @@ for _m in MODULES:
             BY_NAME[_n] = _o
             BY_ID[_o.ID] = _o
 from film.script import SCENES as _S  # noqa: E402
+BY_ID.pop("17_credits", None)
+BY_ID.update({c.ID: c for n, c in BY_NAME.items() if n != "Thumbnail"})
 ORDER = [BY_ID[s["id"]] for s in _S if s["id"] in BY_ID]

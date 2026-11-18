@@ -370,3 +370,27 @@ class Credits(Scene):
         text(c, "built on the work of", W / 2, 640, 30, SOFT, "body", alpha=b)
         text(c, "Richard Crandall · Barry Fagin · Colin Percival · George Woltman · Yves Gallot · Robert Gerbicz · Darren Li", W / 2, 695, 30, INK, "body", alpha=b)
         text(c, "and the volunteers of Seventeen or Bust and PrimeGrid", W / 2, 790, 36, GOLD, "display", alpha=prog(t, self.b(0, 0.4), 0.6), shadow=1)
+
+
+# ======================================================================================
+class Thumbnail(Scene):
+    """not part of the film: the YouTube thumbnail (render with build.py thumbnail)"""
+    ID = "17_credits"
+
+    def setup(self):
+        self.sky = Sky(seed=51, nebulae=(VIOLET, ROSE, AMBER))
+
+    def frame(self, c, t):
+        self.background(c, 2.0, (W / 2, H / 2))
+        glow(c, 1420, 600, 620, AMBER, 0.35)
+        critter(c, 1420, 620, 250, GOLD, 2.0, label="?", seed=2, mood="wow", glowing=True, look=(-0.5, -0.3), label_scale=1.3)
+        for i, k in enumerate(F.REMAINING_K):
+            x, y = 120 + i * 170, 170 + 30 * math.sin(i * 1.3)
+            star(c, x, y, 20, GOLD, 2.0, lit=1.0 if i == 2 else 0.0, seed=i)
+        for i in range(4):
+            line(c, 120 + i * 170, 170 + 30 * math.sin(i * 1.3), 120 + (i + 1) * 170, 170 + 30 * math.sin((i + 1) * 1.3), LILAC, 3, 0.45)
+        glow(c, 560, 520, 700, VIOLET, 0.45)
+        text(c, "THE LAST", 560, 450, 190, INK, "display", shadow=1.5)
+        text(c, "FIVE", 560, 640, 230, GOLD, "display", shadow=1.5)
+        label_tag(c, "14.4-million-digit primes", 560, 830, 50, "#1A1240", CREAM, 1.0, "bold", 0.5)
+        grain(c, 0); vignette(c, 0.45)

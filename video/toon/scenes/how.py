@@ -406,7 +406,7 @@ class KProblem(Scene):
             worried = crack > 0.2
             if fuzzy > 0:
                 lp = skia.Paint(ImageFilter=skia.ImageFilters.Blur(5 * fuzzy, 5 * fuzzy))
-                c.saveLayer(None, lp)
+                c.saveLayer(skia.Rect(x - 90, y - 110, x + 90, y + 90), lp)   # blur only this creature's box
             critter(c, x, y - 6, 38 * k, cols[i], t, label=d if fuzzy < 0.5 else "≈" + d, seed=i, mood="worried" if worried else "happy", look=((tx - x) / RR * 0.5, (ty - y) / RR * 0.5))
             if fuzzy > 0:
                 c.restore()

@@ -342,7 +342,8 @@ def _grain(i):
 
 
 def grain(c, t, fps=60, amount=0.045):
-    img = _grain(int(t * fps / 2) % 6)
+    # a static texture: animated grain is incompressible and YouTube would smear it anyway
+    img = _grain(0)
     sh = img.makeShader(skia.TileMode.kRepeat, skia.TileMode.kRepeat)
     p = skia.Paint(Shader=sh, BlendMode=skia.BlendMode.kOverlay)
     p.setAlphaf(amount * 4)
