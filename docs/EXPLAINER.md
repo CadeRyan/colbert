@@ -128,10 +128,31 @@ around 2^61 − 1" is just a shift and an addition.
 
 The fact colbert relies on is that **in this system every ordinary clock number has all
 the roots we need**. Whatever `k` is, whatever `n` is, the millionth root of `−k·2^n`
-exists and can be computed in advance. The reason, informally: the pairs form a bigger
-world in which every ordinary number can be "factored" as a pair times its mirror image.
-That flexibility guarantees a root can always be found, much as allowing the imaginary
-number `i` guarantees that `−1` has a square root.
+exists and can be computed in advance.
+
+### Why the root always exists
+
+The reason fits on a 7-hour clock, because 7 = 2³ − 1 is also a Mersenne prime. A pair
+`(a, b)` is a point on a 7×7 grid, and the ordinary numbers are its bottom row.
+
+**Step 1: every number is a pair times its mirror.** On a 7-hour clock only four hours are
+squares: 0, 1, 2 and 4 (from 0², 1², 3² and 2²). Take a target, say 3, and subtract each
+square from it: 3, 2, 1 and 6. That is two lists of four hours on a clock of seven, so they
+must share an hour. Here they share 2: 2 is 3², and 3 − 2 = 1 is 1². So 3 = 3² + 1². The
+same counting works on every prime clock, however large: each list holds just over half
+the hours. In pair language, `a² + b²` is the pair `(a, b)` times its mirror image
+`(a, −b)`, so every ordinary number is some pair times its own reflection.
+
+**Step 2: on a Mersenne clock, that is a power of two.** On a clock with `2^p − 1` hours,
+multiplying a pair by itself `2^p − 1` times turns it into its mirror image. One more
+multiplication gives pair × mirror, which is the target. So the pair, multiplied by itself
+`2^p` times, lands exactly on the target. On the 7-hour clock, (3, 1) multiplied by itself
+7 times is (3, 6), its mirror, and 8 times is 3.
+
+On colbert's clock, `p = 61`: some pair `h` satisfies `h^(2^61) = −k·2^n`. Because 2^61 is a
+power of two, `θ = h^(2^40)` satisfies `θ^(2^21) = −k·2^n`, so θ is a two-millionth root,
+exactly the size the transform needs. colbert finds `h` and `θ` in a fraction of a second
+before each test.
 
 With those roots in hand, Percival's no-padding method (step 5, option 2) works in exact
 clock arithmetic. colbert gets the small table of the floating-point method together with

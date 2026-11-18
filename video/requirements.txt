@@ -1,5 +1,7 @@
-manim==0.22.1
+skia-python
+numpy
 gmpy2
 mpmath
+fonttools
 # optional, for build.py scratch-vo
 piper-tts
