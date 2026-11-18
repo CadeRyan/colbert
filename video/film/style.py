@@ -55,9 +55,9 @@ def kexpr(k, n, size=40, color=INK, kcolor=None, mono=True):
     return MarkupText(f'<span foreground="{kc}">{k}</span> × 2<sup>{n}</sup> + 1', font=f, font_size=size, color=color)
 
 
-def chip(label, color=INK, fill=PANEL, size=30, pad=0.22, font=MONO, stroke=None, radius=0.12):
+def chip(label, color=INK, fill=PANEL, size=30, pad=0.22, font=MONO, stroke=None, radius=0.12, minw=0.0):
     t = Text(str(label), font=font, font_size=size, color=color)
-    box = RoundedRectangle(width=t.width + 2 * pad, height=t.height + 1.5 * pad, corner_radius=radius,
+    box = RoundedRectangle(width=max(minw, t.width + 2 * pad), height=t.height + 1.5 * pad, corner_radius=radius,
                            fill_color=fill, fill_opacity=1, stroke_color=stroke or LINE, stroke_width=1.5)
     t.move_to(box)
     return VGroup(box, t)

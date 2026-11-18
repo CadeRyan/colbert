@@ -301,7 +301,11 @@ class S03Elimination(Base):
 
 # ======================================================================================
 def seventeen_grid():
-    return VGroup(*[chip(k, CORAL, size=20, stroke=CORAL) for k in F.SEVENTEEN]).arrange_in_grid(2, 9, buff=(0.15, 0.28))
+    chips = [chip(k, CORAL, size=20, stroke=CORAL, minw=1.18) for k in F.SEVENTEEN]
+    r1 = VGroup(*chips[:9]).arrange(RIGHT, buff=0.15)
+    r2 = VGroup(*chips[9:]).arrange(RIGHT, buff=0.15)
+    VGroup(r1, r2).arrange(DOWN, buff=0.28)
+    return VGroup(*chips)
 
 
 class S04SeventeenOrBust(Base):
@@ -370,7 +374,8 @@ class S04SeventeenOrBust(Base):
         big = VGroup(kexpr(k, fmt(n), 44, kcolor=GOLD),
                      VGroup(M(fmt(F.TWELFTH_DIGITS), 28, INK), T("digits  ·  31 October 2016", 26, MUTED)).arrange(RIGHT, buff=0.2),
                      T(f"tested on a home PC in {F.TWELFTH_DAYS}", 24, MUTED)).arrange(DOWN, buff=0.28).move_to(DOWN * 0.55)
-        self.play(c.animate.scale(1.5).move_to(UP * 0.95).set_color(GOLD), run_time=self.D(2, 0.12))
+        hero = chip(k, BG, fill=GOLD, size=30, stroke=GOLD).move_to(UP * 0.95)
+        self.play(Transform(c, hero), run_time=self.D(2, 0.12))
         self.play(FadeIn(big[0], shift=UP * 0.1), run_time=self.D(2, 0.15))
         self.play(FadeIn(big[1]), run_time=self.D(2, 0.12))
         self.play(FadeIn(big[2]), run_time=self.D(2, 0.12))
