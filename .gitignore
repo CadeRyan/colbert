@@ -6,3 +6,11 @@ src/kernels.inc
 *.tmp
 results.jsonl
 runs/
+video/.venv/
+video/out/
+video/vo_scratch/
+video/vo/*.wav
+video/vo/*.flac
+video/vo/*.mp3
+video/vo/*.m4a
+__pycache__/

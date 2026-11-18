@@ -26,8 +26,8 @@ a **Colbert number** (or Colbert prime). The name is a whimsical tribute to Step
 Colbert. Each one found crosses a `k` off the list. Find all five and the problem is solved.
 
 The catch is size. The search has checked every `n` up to about 47.9 million. The next
-candidate numbers have about **14.4 million digits**. Printed out, one of them would fill
-several thousand books.
+candidate numbers have about **14.4 million digits**. Printed in small type, one of them
+would fill about 3,000 pages.
 
 ## 2. How do you test a 14-million-digit number?
 
@@ -45,8 +45,8 @@ makes one squaring faster makes the whole test faster by the same factor.
 ## 3. Multiplying enormous numbers quickly
 
 School long multiplication of two 14-million-digit numbers takes about 200 trillion
-digit-times-digit steps. Doing that 48 million times would take longer than the age of the
-universe.
+digit-times-digit steps. Doing that 48 million times would take thousands of years, even
+on a fast computer.
 
 The fast method is the **Fast Fourier Transform (FFT)**. The idea, roughly:
 
@@ -60,7 +60,8 @@ The fast method is the **Fast Fourier Transform (FFT)**. The idea, roughly:
 * Convert back, tidy up the carries, and you have the product.
 
 This takes roughly *(number of digits) × log(number of digits)* steps instead of *(number
-of digits)²*, which brings a 14-million-digit squaring down from days to milliseconds.
+of digits)²*, which brings a 14-million-digit squaring down from many minutes to a few
+milliseconds or less.
 
 ## 4. The wrap-around, and why some numbers are easier than others
 

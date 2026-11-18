@@ -62,6 +62,7 @@ Full instructions: [docs/SETUP.md](docs/SETUP.md). First run on a GPU:
 | [NOVELTY.md](docs/NOVELTY.md) | prior-art review: what is new, what isn't, with sources |
 | [DESIGN.md](docs/DESIGN.md) | the mathematics, with proofs |
 | [RESULTS.md](docs/RESULTS.md) | everything that has actually been run, and the search economics |
+| [video/](video/README.md) | *The Last Five*: a 12-minute motion-graphics explainer, its voice-over script, and the build |
 
 ## What finding the next prime takes
 
