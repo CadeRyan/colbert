@@ -4,6 +4,18 @@
 #include <cstdio>
 #include <cmath>
 #include <fstream>
+#include <cstring>
+#ifdef _WIN32
+#define NOMINMAX
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+// rename() on Windows refuses to overwrite an existing file, so the second checkpoint would fail
+static bool replaceFile(const std::string& from, const std::string& to) {
+  return MoveFileExA(from.c_str(), to.c_str(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH) != 0;
+}
+#else
+static bool replaceFile(const std::string& from, const std::string& to) { return rename(from.c_str(), to.c_str()) == 0; }
+#endif
 
 // Registers
 enum { RX = 0, RD = 1, RT = 2, RX0 = 3, NREGS = 4 };
@@ -32,24 +44,35 @@ static void saveCkpt(const std::string& path, const Layout& L, u32 base, u32 gl,
   bool ok = fwrite(hdr, sizeof hdr, 1, f) == 1 && fwrite(X.data(), 4, X.size(), f) == X.size() &&
             fwrite(D.data(), 4, D.size(), f) == D.size() && fwrite(&sum, 8, 1, f) == 1;
   ok = (fclose(f) == 0) && ok;
-  if (!ok || rename(tmp.c_str(), path.c_str()) != 0) throw std::runtime_error("checkpoint write failed: " + path);
+  if (!ok || !replaceFile(tmp, path)) throw std::runtime_error("checkpoint write failed: " + path);
 }
-static bool loadCkpt(const std::string& path, const Layout& L, u32 base, u32 gl, u64& iter, std::vector<i32>& X, std::vector<i32>& D) {
+// Returns "none" (no file), "resumed", or "rejected: <why>".
+static std::string loadCkpt(const std::string& path, const Layout& L, u32 base, u32 gl, u64& iter, std::vector<i32>& X, std::vector<i32>& D) {
   FILE* f = fopen(path.c_str(), "rb");
-  if (!f) return false;
+  if (!f) return "none";
   u64 hdr[8], sum = 0; X.resize(L.N); D.resize(L.N);
   bool ok = fread(hdr, sizeof hdr, 1, f) == 1 && fread(X.data(), 4, L.N, f) == L.N && fread(D.data(), 4, L.N, f) == L.N && fread(&sum, 8, 1, f) == 1;
   fclose(f);
-  if (!ok || hdr[0] != CKPT_MAGIC || hdr[1] != L.k || hdr[2] != L.n || hdr[3] != L.N || hdr[4] != (u64)L.nPrimes || hdr[5] != base || hdr[6] != gl) return false;
+  if (!ok) return "rejected: file is truncated or from a different transform size";
+  if (hdr[0] != CKPT_MAGIC) return "rejected: not a colbert checkpoint, or an incompatible format version";
+  if (hdr[1] != L.k || hdr[2] != L.n) return "rejected: checkpoint is for a different number";
+  if (hdr[3] != L.N || hdr[4] != (u64)L.nPrimes) return "rejected: transform size or prime count differs (N=" + std::to_string(hdr[3]) + ", primes=" + std::to_string(hdr[4]) + ")";
+  if (hdr[5] != base) return "rejected: Proth base differs";
+  if (hdr[6] != gl) return "rejected: Gerbicz block length differs (checkpoint " + std::to_string(hdr[6]) + ", this run " + std::to_string(gl) + "; pass --gerbicz " + std::to_string(hdr[6]) + ")";
+  if (sum != fnv(D, fnv(X, 1469598103934665603ULL ^ hdr[7]))) return "rejected: checksum mismatch (corrupt file)";
   iter = hdr[7];
-  return sum == fnv(D, fnv(X, 1469598103934665603ULL ^ iter));
+  return "resumed";
+}
+
+u32 defaultGerbiczL(u64 n) {
+  return (u32)std::max(4.0, std::min(1000.0, std::floor(std::sqrt((double)(n - 1) / 2))));
 }
 
 ProthResult prothTest(Engine& e, const ProthOptions& opt) {
   const Layout& L = e.layout();
   const u64 total = L.n - 1;                         // squarings: y_0 = a^k, y_{n-1} = a^(k 2^(n-1))
   ProthResult R; R.base = prothBase(L.k, L.n);
-  u32 gl = opt.gerbiczL ? opt.gerbiczL : (u32)std::max(4.0, std::min(1000.0, std::floor(std::sqrt((double)total / 2))));
+  u32 gl = opt.gerbiczL ? opt.gerbiczL : defaultGerbiczL(L.n);
   const u64 checkEvery = (u64)gl * gl;               // iterations between full Gerbicz verifications
   mpz_class P = modulus(L);
   double t0 = now(), tRep = t0;
@@ -63,12 +86,43 @@ ProthResult prothTest(Engine& e, const ProthOptions& opt) {
   u64 iter = 0;        // squarings applied to RX
   u64 good = 0;        // iteration of the last verified state (multiple of gl)
   std::vector<i32> goodX = X0, goodD = X0;
-  if (!opt.checkpointPath.empty() && loadCkpt(opt.checkpointPath, L, R.base, gl, good, goodX, goodD)) {
-    R.resumed = true;
-    if (!opt.quiet) fprintf(stderr, "resuming from verified checkpoint at iteration %llu\n", (unsigned long long)good);
+  std::string ckptState = "none";
+  if (!opt.checkpointPath.empty()) {
+    ckptState = loadCkpt(opt.checkpointPath, L, R.base, gl, good, goodX, goodD);
+    if (ckptState == "resumed") {
+      R.resumed = true;
+      if (!opt.quiet) fprintf(stderr, "resuming from verified checkpoint at iteration %llu\n", (unsigned long long)good);
+    } else {
+      if (ckptState != "none") {
+        // keep the unusable file (it may be recoverable with other options) instead of overwriting it
+        std::string aside = opt.checkpointPath + ".rejected";
+        replaceFile(opt.checkpointPath, aside);
+        ckptState += " (kept as " + aside + ")";
+        if (!opt.quiet) fprintf(stderr, "checkpoint %s; starting from the beginning\n", ckptState.c_str());
+      }
+      good = 0; goodX = X0; goodD = X0;
+      if (ckptState == "none") ckptState = "new";
+    }
   }
   auto restore = [&]() { e.write(RX, goodX); e.write(RD, goodD); iter = good; };
   restore();
+
+  // event plumbing (machine-readable; independent of the human progress lines)
+  ProthStatus st; st.total = total; st.gerbiczL = gl; st.checkEvery = checkEvery; st.resumedFrom = good;
+  double tEv = now(); u64 iterEv = iter;
+  auto emit = [&](const char* ev) {
+    if (!opt.onEvent) return;
+    double t = now();
+    st.iteration = iter; st.checksPassed = R.checksPassed; st.rollbacks = R.rollbacks; st.verifiedIteration = good;
+    st.elapsed = t - t0;
+    u64 doneHere = iter > st.resumedFrom ? iter - st.resumedFrom : 0;
+    st.msPerIter = doneHere ? 1e3 * (t - t0) / (double)doneHere : 0;
+    if (iter > iterEv && t > tEv) st.msPerIterRecent = 1e3 * (t - tEv) / (double)(iter - iterEv);
+    if (!strcmp(ev, "progress")) { tEv = t; iterEv = iter; }
+    opt.onEvent(ev, st);
+  };
+  st.checkpoint = ckptState;
+  emit("start");
 
   // Gerbicz-Li. With D_t = X_0 o X_gl o ... o X_{t gl} and X_{(i+1)gl} = X_{i gl}^(o 2^gl):
   //     D_{t+1} = D_t o X_{(t+1)gl} = X_0 o D_t^(o 2^gl).
@@ -78,7 +132,8 @@ ProthResult prothTest(Engine& e, const ProthOptions& opt) {
   const u64 startIter = iter;
   while (iter < lastFull) {
     e.square(RX, gl); iter += gl;
-    bool due = (iter - good) >= checkEvery || iter == lastFull;
+    const bool stopNow = opt.stopRequested && opt.stopRequested();
+    bool due = (iter - good) >= checkEvery || iter == lastFull || stopNow;
     if (due) e.copy(RT, RD);                         // D_t
     e.mul(RD, RX);                                   // D_{t+1}
     if (opt.faultHook) opt.faultHook(e, iter);
@@ -89,12 +144,21 @@ ProthResult prothTest(Engine& e, const ProthOptions& opt) {
         R.checksPassed++;
         good = iter; e.read(RX, goodX); goodD = vd;
         if (!opt.checkpointPath.empty()) saveCkpt(opt.checkpointPath, L, R.base, gl, good, goodX, goodD);
+        emit("verified");
       } else {
         R.rollbacks++;
         if (!opt.quiet) fprintf(stderr, "Gerbicz check FAILED at iteration %llu; rolling back to %llu\n", (unsigned long long)iter, (unsigned long long)good);
+        emit("rollback");
         if (R.rollbacks > 20) throw std::runtime_error("too many Gerbicz failures; hardware or software is unreliable");
         restore();
-        continue;
+        tEv = now(); iterEv = iter;
+        if (!stopNow) continue;
+      }
+      if (stopNow) {                                 // state at `good` is verified (and saved)
+        iter = good;
+        R.stopped = true; R.iterations = good; R.seconds = now() - t0;
+        emit("stopped");
+        return R;
       }
     }
     double t = now();
@@ -105,6 +169,7 @@ ProthResult prothTest(Engine& e, const ProthOptions& opt) {
               100.0 * iter / total, (unsigned long long)iter, (unsigned long long)total, msit, msit * (total - iter) / 3.6e6,
               (unsigned long long)R.checksPassed, (unsigned long long)R.rollbacks);
     }
+    if (opt.onEvent && t - tEv >= opt.eventSeconds) emit("progress");
   }
 
   // Tail (< gl squarings) is outside the Gerbicz chain: run it twice and compare.

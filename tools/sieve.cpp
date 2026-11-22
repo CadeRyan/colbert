@@ -1,10 +1,11 @@
 // Candidate sieve for the remaining Sierpinski multipliers.
 //
-//   sieve NMIN NMAX PMAX [out.txt]        (PMAX <= 2^32)
+//   sieve NMIN NMAX PMAX [out.txt [factors.txt]]        (PMAX <= 2^32)
 //
 // Removes every n in [NMIN, NMAX] for which k*2^n+1 has a prime factor p <= PMAX, for
 // k in {21181, 22699, 24737, 55459, 67607}, and prints what is left together with the
-// expected number of primes among the survivors.
+// expected number of primes among the survivors. factors.txt lists "k n p" for every n removed
+// by a prime p >= 20000 (the first p found), so each removal can be checked independently.
 //
 // Method: small primes fix n to a few residue classes mod 720 for each k (these k are the
 // ones that survive precisely because they are "almost covered"). For every larger p the
@@ -32,13 +33,16 @@ static u64 powmod(u64 a, u64 e, u64 p) { u64 r = 1; a %= p; for (; e; e >>= 1, a
 static u64 invmod(u64 a, u64 p) { return powmod(a, p - 2, p); }
 
 struct Target { int k; u32 cls; };
+struct Hit { u64 n; u32 p; int k; };
 
 int main(int argc, char** argv) {
-  if (argc < 4) { fprintf(stderr, "usage: sieve NMIN NMAX PMAX [out.txt]\n"); return 2; }
+  if (argc < 4) { fprintf(stderr, "usage: sieve NMIN NMAX PMAX [out.txt [factors.txt]]\n"); return 2; }
   u64 n0 = strtoull(argv[1], 0, 10), n1 = strtoull(argv[2], 0, 10), pmax = (u64)strtod(argv[3], 0);
   if (pmax > 0xFFFFFFFFULL) pmax = 0xFFFFFFFFULL;
   const u64 R = n1 - n0 + 1;
   std::vector<std::vector<uint8_t>> dead(NK, std::vector<uint8_t>(R, 0));
+  const bool keepFactors = argc > 5;
+  std::vector<Hit> found;                                                      // (k, n, p) removed in stage 2
 
   // --- stage 1: primes below SMALL by direct marking
   const u32 SMALL = 20000;
@@ -77,7 +81,7 @@ int main(int argc, char** argv) {
     std::vector<uint8_t> comp(SEG);
     std::vector<u32> hkey((size_t)1 << hbits), hval((size_t)1 << hbits), hgen((size_t)1 << hbits, 0);
     u32 gen = 0; const u32 hmask = (1u << hbits) - 1;
-    std::vector<std::pair<int, u64>> hits;
+    std::vector<Hit> hits;
     #pragma omp for schedule(dynamic, 4)
     for (u64 sg = 0; sg < nseg; sg++) {
       u64 lo = SMALL + sg * SEG, hi = std::min(lo + SEG, pmax + 1);
@@ -111,21 +115,21 @@ int main(int argc, char** argv) {
           };
           u32 j;
           if (ord) {                                   // g has small order: all solutions u = j (mod ord)
-            if (lookup(c, j)) for (u64 u = j; u < T; u += ord) hits.push_back({ tg.k, tg.cls + MOD * (t0 + u) });
+            if (lookup(c, j)) for (u64 u = j; u < T; u += ord) hits.push_back({ tg.cls + MOD * (t0 + u), (u32)p, tg.k });
           } else {
             for (u32 i = 0; i < giant; i++, c = mulmod(c, gim, p))
-              if (lookup(c, j)) { u64 u = (u64)i * m + j; if (u < T) hits.push_back({ tg.k, tg.cls + MOD * (t0 + u) }); }
+              if (lookup(c, j)) { u64 u = (u64)i * m + j; if (u < T) hits.push_back({ tg.cls + MOD * (t0 + u), (u32)p, tg.k }); }
           }
         }
       }
       if (hits.size() > 4096) {
         #pragma omp critical
-        { for (auto& h : hits) if (h.second >= n0 && h.second <= n1 && !dead[h.first][h.second - n0]) { dead[h.first][h.second - n0] = 1; nfactors++; } }
+        { for (auto& h : hits) if (h.n >= n0 && h.n <= n1 && !dead[h.k][h.n - n0]) { dead[h.k][h.n - n0] = 1; nfactors++; if (keepFactors) found.push_back(h); } }
         hits.clear();
       }
     }
     #pragma omp critical
-    { for (auto& h : hits) if (h.second >= n0 && h.second <= n1 && !dead[h.first][h.second - n0]) { dead[h.first][h.second - n0] = 1; nfactors++; } }
+    { for (auto& h : hits) if (h.n >= n0 && h.n <= n1 && !dead[h.k][h.n - n0]) { dead[h.k][h.n - n0] = 1; nfactors++; if (keepFactors) found.push_back(h); } }
   }
   fprintf(stderr, "sieved %llu primes up to %llu in %.0f s; %llu candidates removed by primes >= %u\n", (unsigned long long)nprimes,
           (unsigned long long)pmax, omp_get_wtime() - tstart, (unsigned long long)nfactors, SMALL);
@@ -153,6 +157,13 @@ int main(int argc, char** argv) {
     fprintf(out, "# k n   -- survivors of trial division to p <= %llu, ordered by n\n", (unsigned long long)pmax);
     for (auto& a : all) fprintf(out, "%u %llu\n", a.second, (unsigned long long)a.first);
     fclose(out);
+  }
+  if (keepFactors) {
+    FILE* fo = fopen(argv[5], "w");
+    std::sort(found.begin(), found.end(), [](const Hit& a, const Hit& b) { return a.n != b.n ? a.n < b.n : KS[a.k] < KS[b.k]; });
+    fprintf(fo, "# k n p   -- p divides k*2^n+1; first factor found in [%u, %llu], ordered by n\n", SMALL, (unsigned long long)pmax);
+    for (auto& h : found) fprintf(fo, "%u %llu %u\n", KS[h.k], (unsigned long long)h.n, h.p);
+    fclose(fo);
   }
   return 0;
 }

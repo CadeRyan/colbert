@@ -172,14 +172,15 @@ struct CpuEngine : Engine {
     lo = split(r, L.width[L.N - 2]); hi = (i32)r; c = q;
   }
 
-  void carry(i32* x) {
+  // mulc: the convolution output is multiplied by this small constant before carrying
+  void carry(i32* x, u32 mulc = 1) {
     const size_t N = L.N, nb = N / CARRY_BLOCK;
     #pragma omp parallel for schedule(static)
     for (size_t b = 0; b < nb; b++) {
       i128 c = 0;
       for (size_t m = b * CARRY_BLOCK; m < (b + 1) * CARRY_BLOCK; m++) {
-        i128 v = value(m) + c;
-        if (m + 2 == N) { splitTop(v + (value(m + 1) << L.width[m]), x[m], x[m + 1], c); break; }
+        i128 v = value(m) * (i128)mulc + c;
+        if (m + 2 == N) { splitTop(v + ((value(m + 1) * (i128)mulc) << L.width[m]), x[m], x[m + 1], c); break; }
         x[m] = split(v, L.width[m]);
         c = v;
       }
@@ -199,13 +200,42 @@ struct CpuEngine : Engine {
     if (bad) throw std::runtime_error("internal: carry did not settle");
   }
 
-  void square(int r, u64 count) override {
+  void square(int r, u64 count) override { for (u64 it = 0; it < count; it++) sq(regs.at(r).data(), 1); }
+  void squareMul(int r, const std::vector<u32>& mults) override { for (u32 c : mults) sq(regs.at(r).data(), c); }
+  void sq(i32* x, u32 mulc) {
+    x61.weight(x, x61.z.data()); x61.dif(x61.z.data()); x61.pointwise(x61.z.data(), x61.z.data()); x61.dit(x61.z.data());
+    if (x31) { x31->weight(x, x31->z.data()); x31->dif(x31->z.data()); x31->pointwise(x31->z.data(), x31->z.data()); x31->dit(x31->z.data()); }
+    carry(x, mulc);
+  }
+
+  // spectrum slots (P-1 stage 2): the forward transform of a register, both fields
+  std::vector<std::vector<F61::C>> s61; std::vector<std::vector<F31::C>> s31;
+  size_t spectrumBytes() const override { return L.N / 2 * (sizeof(F61::C) + (x31 ? sizeof(F31::C) : 0)); }
+  size_t deviceMemory() const override { return (size_t)8 << 30; }
+  int allocSlots(int want, size_t budget) override {
+    int n = (int)std::min<size_t>((size_t)want, budget / spectrumBytes());
+    s61.assign(n, std::vector<F61::C>(L.N / 2));
+    s31.assign(x31 ? n : 0, std::vector<F31::C>(L.N / 2));
+    return n;
+  }
+  void toSpectrum(int slot, int r) override {
+    const i32* x = regs.at(r).data();
+    x61.weight(x, s61.at(slot).data()); x61.dif(s61.at(slot).data());
+    if (x31) { x31->weight(x, s31.at(slot).data()); x31->dif(s31.at(slot).data()); }
+  }
+  template <class F, class X> static void diff(X& xf, const std::vector<typename F::C>& a, const std::vector<typename F::C>& b) {
+    #pragma omp parallel for schedule(static)
+    for (size_t j = 0; j < a.size(); j++) xf.y[j] = csub<F>(a[j], b[j]);
+  }
+  void mulDiff(int r, int sa, int sb) override {
     i32* x = regs.at(r).data();
-    for (u64 it = 0; it < count; it++) {
-      x61.weight(x, x61.z.data()); x61.dif(x61.z.data()); x61.pointwise(x61.z.data(), x61.z.data()); x61.dit(x61.z.data());
-      if (x31) { x31->weight(x, x31->z.data()); x31->dif(x31->z.data()); x31->pointwise(x31->z.data(), x31->z.data()); x31->dit(x31->z.data()); }
-      carry(x);
+    x61.weight(x, x61.z.data()); x61.dif(x61.z.data());
+    diff<F61>(x61, s61.at(sa), s61.at(sb)); x61.pointwise(x61.z.data(), x61.y.data()); x61.dit(x61.z.data());
+    if (x31) {
+      x31->weight(x, x31->z.data()); x31->dif(x31->z.data());
+      diff<F31>(*x31, s31.at(sa), s31.at(sb)); x31->pointwise(x31->z.data(), x31->y.data()); x31->dit(x31->z.data());
     }
+    carry(x);
   }
   void mul(int dst, int src) override {
     i32* x = regs.at(dst).data(); const i32* y = regs.at(src).data();

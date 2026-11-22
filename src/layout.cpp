@@ -105,6 +105,7 @@ template <class F> Tables<F>::Tables(const Layout& L) {
     if (gam.re != 0) throw std::runtime_error("internal: gamma not imaginary");
     T g = gam.im, gi = finv<F>(g);
     T sc = F::mul(kq, finv<F>((T)(M % Pq)));
+    this->th = th; this->g = g; this->gi = gi; this->sc = sc;
     W1.resize(M); W2.resize(M); U.resize(M); V.resize(M);
     C t = { 1, 0 }, ti = { 1, 0 };
     for (size_t j = 0; j < M; j++) {
@@ -121,6 +122,7 @@ template <class F> Tables<F>::Tables(const Layout& L) {
     u64 m = (Pq - 1) / 2;
     T rho = fpow<F>(finv<F>(c), invmod(N % m, m)), rhoi = finv<F>(rho);
     T sc = F::mul(kq, finv<F>((T)((4 * M) % Pq)));
+    this->rho = rho; this->sc = sc;
     a.resize(N); ai.resize(N);
     T t = 1, ti = sc;
     for (size_t j = 0; j < N; j++) {

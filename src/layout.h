@@ -37,6 +37,12 @@ template <class F> struct Tables {
   std::vector<T> a, ai;            // real: forward / inverse weights (N each); ai includes k/(4M)
   std::vector<C> tw;               // real: omega_M^{brev(p)} for the M/2 conjugate pairs
   std::vector<C> W1, W2, U, V;     // fold: M each; U, V include k/M
+  // the constants the tables are built from (the OpenCL fast path computes weights from them):
+  //   real: a_j = rho^j 2^s_j,  ai_j = sc rho^-j 2^-s_j
+  //   fold: W1_j x_j + W2_j x_{j+M} = th^-j (2^s_j x_j + i g 2^s_{j+M} x_{j+M}),
+  //         U_j = sc th^j 2^-s_j,  V_j = sc gi th^j 2^-s_{j+M}
+  T rho = 0, g = 0, gi = 0, sc = 0;
+  C th = { 0, 0 };
   explicit Tables(const Layout& L);
 };
 
