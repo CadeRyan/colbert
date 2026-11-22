@@ -1,16 +1,46 @@
-colbert
-sieve
+# --- secrets and local configuration: never commit
+.env
+.env.*
+*.pem
+*.key
+.claude/settings.local.json
+
+# --- not part of the public project: the explainer videos
+/movie/
+/video/
+
+# --- build output
+/colbert
+/colbert-cpu
+/sieve
+*.exe
 *.o
 src/kernels.inc
+app/engine/
+/build/
+/dist/
+/Colbert.spec
+
+# --- run output: checkpoints, results, ledgers, logs
 *.ckpt
+*.pm1
 *.tmp
-results.jsonl
+*.jsonl
 runs/
-video/.venv/
-video/out/
-video/vo_scratch/
-video/vo/*.wav
-video/vo/*.flac
-video/vo/*.mp3
-video/vo/*.m4a
+checkpoints/
+ckpt/
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+ledger.sqlite*
+*.log
+
+# --- tooling
 __pycache__/
+*.pyc
+.venv/
+venv/
+node_modules/
+.DS_Store
+.vscode/
+.idea/
