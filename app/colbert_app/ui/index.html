@@ -1,0 +1,567 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Colbert</title>
+<style>
+:root {
+  --bg: #f6f5f1; --panel: #ffffff; --fg: #1c1c1a; --mut: #6b6a65; --line: #e5e2da; --line2: #d6d2c8;
+  --acc: #2d6a4b; --acc-fg: #ffffff; --acc-weak: #e4efe8; --warn: #9a5800; --warn-weak: #fbf0de;
+  --bad: #b3261e; --bad-weak: #fbe7e5; --chart: #2d6a4b; --shadow: 0 1px 2px rgba(0,0,0,.04), 0 2px 8px rgba(0,0,0,.04);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #121211; --panel: #1b1b19; --fg: #ecebe6; --mut: #9b9a93; --line: #2b2a27; --line2: #3a3934;
+    --acc: #77c597; --acc-fg: #0f1a13; --acc-weak: #1d2c23; --warn: #e5a956; --warn-weak: #2c2317;
+    --bad: #f08a80; --bad-weak: #2e1b19; --chart: #77c597; --shadow: none;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #121211; --panel: #1b1b19; --fg: #ecebe6; --mut: #9b9a93; --line: #2b2a27; --line2: #3a3934;
+  --acc: #77c597; --acc-fg: #0f1a13; --acc-weak: #1d2c23; --warn: #e5a956; --warn-weak: #2c2317;
+  --bad: #f08a80; --bad-weak: #2e1b19; --chart: #77c597; --shadow: none;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+.wrap { max-width: 980px; margin: 0 auto; padding: 20px 16px 48px; }
+header { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; margin-bottom: 14px; }
+.brand { flex: 1; min-width: 220px; }
+.brand h1 { margin: 0; font-size: 22px; letter-spacing: -0.01em; }
+.brand p { margin: 0; color: var(--mut); font-size: 13px; }
+.pill { display: inline-flex; align-items: center; gap: 8px; padding: 5px 12px; border-radius: 999px; background: var(--panel);
+        border: 1px solid var(--line); font-size: 13px; white-space: nowrap; }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--mut); }
+.dot.running { background: var(--acc); box-shadow: 0 0 0 3px var(--acc-weak); }
+.dot.validating, .dot.stopping, .dot.waiting { background: var(--warn); }
+.dot.error { background: var(--bad); }
+button { font: inherit; border-radius: 8px; border: 1px solid var(--line2); background: var(--panel); color: var(--fg);
+         padding: 7px 14px; cursor: pointer; }
+button:hover { border-color: var(--mut); }
+button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible { outline: 2px solid var(--acc); outline-offset: 2px; }
+button.primary { background: var(--acc); color: var(--acc-fg); border-color: var(--acc); font-weight: 600; min-width: 96px; }
+button.small { padding: 4px 10px; font-size: 13px; }
+button:disabled { opacity: .5; cursor: default; }
+nav { display: flex; gap: 4px; border-bottom: 1px solid var(--line); margin-bottom: 18px; overflow-x: auto; }
+nav button { border: 0; border-bottom: 2px solid transparent; border-radius: 0; background: none; color: var(--mut); padding: 8px 12px; }
+nav button.on { color: var(--fg); border-bottom-color: var(--acc); font-weight: 600; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 18px; margin-bottom: 16px; box-shadow: var(--shadow); }
+.card h2 { margin: 0 0 4px; font-size: 16px; }
+.card h3 { margin: 18px 0 8px; font-size: 14px; }
+.mut { color: var(--mut); }
+.small-t { font-size: 13px; }
+.number { font-size: 26px; font-weight: 650; letter-spacing: -0.01em; margin: 2px 0; font-variant-numeric: tabular-nums; word-break: break-word; }
+.number sup { font-size: 15px; }
+.bar { height: 12px; background: var(--line); border-radius: 6px; overflow: hidden; margin: 14px 0 6px; }
+.bar > div { height: 100%; background: var(--acc); border-radius: 6px; transition: width .6s ease; min-width: 3px; }
+.prog-row { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; font-variant-numeric: tabular-nums; }
+.pct { font-size: 20px; font-weight: 650; }
+.grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-top: 16px; }
+@media (max-width: 760px) { .grid { grid-template-columns: repeat(2, 1fr); } }
+.tile { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
+.tile .k { font-size: 12px; color: var(--mut); text-transform: uppercase; letter-spacing: .04em; }
+.tile .v { font-size: 18px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.tile .s { font-size: 12.5px; color: var(--mut); }
+.chart { width: 100%; height: 120px; display: block; margin-top: 6px; }
+.chart text { fill: var(--mut); font-size: 11px; }
+.alert { border-radius: 10px; padding: 12px 14px; margin-bottom: 14px; border: 1px solid var(--line); background: var(--panel); }
+.alert.warn { background: var(--warn-weak); border-color: transparent; }
+.alert.bad { background: var(--bad-weak); border-color: transparent; }
+.alert.good { background: var(--acc-weak); border-color: transparent; }
+.alert b { display: block; margin-bottom: 2px; }
+.prime { border: 2px solid var(--acc); background: var(--acc-weak); border-radius: 12px; padding: 16px 18px; margin-bottom: 16px; }
+.prime h2 { margin: 0 0 6px; font-size: 18px; }
+table { width: 100%; border-collapse: collapse; font-size: 14px; }
+th { text-align: left; font-weight: 600; color: var(--mut); font-size: 12.5px; padding: 6px 8px; border-bottom: 1px solid var(--line); }
+td { padding: 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+.tablewrap { overflow-x: auto; }
+.tag { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 12px; border: 1px solid var(--line2); white-space: nowrap; }
+.tag.good { background: var(--acc-weak); border-color: transparent; color: var(--acc); }
+.tag.bad { background: var(--bad-weak); border-color: transparent; color: var(--bad); }
+.tag.warn { background: var(--warn-weak); border-color: transparent; color: var(--warn); }
+label { display: block; font-size: 13px; font-weight: 600; margin: 12px 0 4px; }
+label .mut { font-weight: 400; }
+input, textarea, select { width: 100%; font: inherit; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--line2);
+                          background: var(--bg); color: var(--fg); }
+textarea { min-height: 110px; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 13px; }
+.row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-top: 12px; }
+.two { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+@media (max-width: 760px) { .two { grid-template-columns: 1fr; } }
+.choice { border: 1px solid var(--line); border-radius: 12px; padding: 16px; cursor: pointer; background: var(--panel); }
+.choice.on { border-color: var(--acc); box-shadow: 0 0 0 1px var(--acc); }
+.choice h2 { display: flex; align-items: center; gap: 8px; }
+pre.log { background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 12px; max-height: 520px; overflow: auto;
+          font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; white-space: pre-wrap; word-break: break-word; margin: 0; }
+.empty { text-align: center; padding: 34px 12px; }
+.empty .number { font-size: 22px; }
+.hide { display: none !important; }
+code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12.5px; background: var(--bg); padding: 1px 5px; border-radius: 4px; }
+a { color: var(--acc); }
+.toast { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); background: var(--fg); color: var(--bg); padding: 9px 16px;
+         border-radius: 8px; font-size: 14px; opacity: 0; transition: opacity .2s; pointer-events: none; max-width: calc(100% - 32px); }
+.toast.show { opacity: 1; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="brand">
+      <h1>Colbert</h1>
+      <p>Proth tests for the last five Sierpiński candidates</p>
+    </div>
+    <span class="pill" id="pill"><span class="dot" id="dot"></span><span id="pilltext">Starting</span></span>
+    <button class="primary" id="go">Start</button>
+  </header>
+
+  <div id="alerts"></div>
+
+  <nav id="tabs">
+    <button data-tab="overview" class="on">Overview</button>
+    <button data-tab="work">Work</button>
+    <button data-tab="devices">Devices</button>
+    <button data-tab="results">Results</button>
+    <button data-tab="log">Log</button>
+    <button data-tab="settings">Settings</button>
+  </nav>
+
+  <!-- Overview -->
+  <section id="t-overview">
+    <div class="card" id="now"></div>
+    <div class="card hide" id="speedcard">
+      <h2>Speed</h2>
+      <div class="mut small-t" id="speedsub"></div>
+      <svg class="chart" id="chart" viewBox="0 0 900 120" preserveAspectRatio="none" role="img" aria-label="Milliseconds per squaring over time"></svg>
+    </div>
+    <div class="card hide" id="projcard"></div>
+  </section>
+
+  <!-- Work -->
+  <section id="t-work" class="hide">
+    <div class="two">
+      <div class="choice" id="c-ledger">
+        <h2><input type="radio" name="mode" value="ledger" style="width:auto"> Join the project</h2>
+        <p class="mut small-t">Get numbers from the shared ledger, so that many computers work together without gaps or
+          wasted repeats. Your results are double-checked by other computers.</p>
+        <label>Ledger address</label><input id="w-url" placeholder="https://…">
+        <label>Your name <span class="mut">(shown on the project page)</span></label><input id="w-owner" maxlength="40">
+        <label>Invite code <span class="mut">(if the project asks for one)</span></label><input id="w-invite">
+        <div class="row"><button class="primary" id="w-join">Join</button><span class="mut small-t" id="w-joined"></span></div>
+      </div>
+      <div class="choice" id="c-local">
+        <h2><input type="radio" name="mode" value="local" style="width:auto"> My own numbers</h2>
+        <p class="mut small-t">Test numbers you choose, one per line, as <code>k n</code> or <code>k*2^n+1</code>.
+          Results stay on this computer.</p>
+        <textarea id="w-add" placeholder="21181 47856020"></textarea>
+        <div class="row">
+          <button id="w-addbtn">Add to list</button>
+          <button id="w-known" title="A Seventeen or Bust prime from 2002: proves the whole pipeline works on this computer">Add a known-prime check</button>
+          <button id="w-clear">Clear list</button>
+          <button class="primary" id="w-uselocal">Use my list</button>
+        </div>
+        <h3>List <span class="mut" id="w-qn"></span></h3>
+        <div class="tablewrap"><table id="w-queue"></table></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Devices -->
+  <section id="t-devices" class="hide">
+    <div class="card">
+      <h2>Devices</h2>
+      <p class="mut small-t">Every engine build is checked on every device before it gets real work: a self-test against
+        exact arithmetic, then a timing at full size. The fastest device that passes is used, unless you pick one.
+        This repeats automatically whenever the engine is updated.</p>
+      <div class="tablewrap"><table id="d-table"></table></div>
+      <div class="row">
+        <button id="d-check">Check all devices again</button>
+        <label style="margin:0;font-weight:400" class="mut small-t">Use:</label>
+        <select id="d-choice" style="width:auto;min-width:220px"></select>
+      </div>
+      <div class="mut small-t" id="d-progress" style="margin-top:10px"></div>
+    </div>
+    <div class="card">
+      <h2>Engine</h2>
+      <div id="e-info" class="small-t"></div>
+      <div class="row hide" id="e-buildrow"><button id="e-build">Build the engine from source</button>
+        <span class="mut small-t">Runs <code>make colbert colbert-cpu</code> in the colbert folder.</span></div>
+    </div>
+  </section>
+
+  <!-- Results -->
+  <section id="t-results" class="hide">
+    <div class="card">
+      <h2>Results from this computer</h2>
+      <div class="tablewrap"><table id="r-table"></table></div>
+    </div>
+  </section>
+
+  <!-- Log -->
+  <section id="t-log" class="hide">
+    <div class="card"><h2>Log</h2><p class="mut small-t" id="l-path"></p><pre class="log" id="log"></pre></div>
+  </section>
+
+  <!-- Settings -->
+  <section id="t-settings" class="hide">
+    <div class="card">
+      <h2>Settings</h2>
+      <label>This computer's name <span class="mut">(shown to the project)</span></label><input id="s-worker_name" maxlength="60">
+      <label>CPU threads for the CPU engine <span class="mut">(0 = all cores; fewer keeps the computer snappier)</span></label>
+      <input id="s-cpu_threads" type="number" min="0" max="1024">
+      <label>Save progress about every <span class="mut">(minutes; shorter saves are safer and cost a little speed)</span></label>
+      <input id="s-checkpoint_minutes" type="number" min="1" max="240" step="1">
+      <label style="display:flex;gap:8px;align-items:center;font-weight:400"><input id="s-autostart" type="checkbox" style="width:auto">
+        Start working when the app opens</label>
+      <label style="display:flex;gap:8px;align-items:center;font-weight:400"><input id="s-pm1" type="checkbox" style="width:auto">
+        Look for a factor first (P−1) when that saves work <span class="mut">(recommended: a found factor means no test is needed)</span></label>
+      <h3>Advanced</h3>
+      <label>Engine binary <span class="mut">(empty = the one bundled with the app, or ./colbert in a source checkout)</span></label>
+      <input id="s-engine_path" placeholder="/path/to/colbert">
+      <label>Extra engine arguments <span class="mut">(passed to every engine command; for testing new engine options)</span></label>
+      <input id="s-extra_args" placeholder="--size 4194304">
+      <div class="row"><button class="primary" id="s-save">Save settings</button></div>
+    </div>
+    <div class="card">
+      <h2>Quit</h2>
+      <p class="mut small-t">Closing this browser tab leaves Colbert working in the background. Quit saves progress and stops it.</p>
+      <button id="s-quit">Save progress and quit</button>
+    </div>
+  </section>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+"use strict";
+const TOKEN = "__COLBERT_TOKEN__";
+let S = null, tab = "overview";
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const fmt = (n) => (n == null ? "—" : Number(n).toLocaleString());
+
+function dur(s) {
+  if (s == null || !isFinite(s)) return "—";
+  s = Math.max(0, s);
+  if (s < 90) return Math.round(s) + " s";
+  if (s < 5400) return Math.round(s / 60) + " min";
+  if (s < 172800) { const h = Math.floor(s / 3600), m = Math.round((s % 3600) / 60); return h + " h " + m + " min"; }
+  const d = Math.floor(s / 86400), h = Math.round((s % 86400) / 3600); return d + " d " + h + " h";
+}
+function ago(t) { return t ? dur(Date.now() / 1000 - t) + " ago" : "—"; }
+function when(t) {
+  const d = new Date(t * 1000), now = new Date();
+  const opts = { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" };
+  if (d - now > 300 * 86400e3) opts.year = "numeric";
+  return d.toLocaleString(undefined, opts);
+}
+function num(k, n) { return esc(k) + "·2<sup>" + esc(Number(n).toLocaleString()) + "</sup>+1"; }
+function toast(msg) { const t = $("toast"); t.textContent = msg; t.classList.add("show"); clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove("show"), 3500); }
+
+async function api(path, body) {
+  const r = await fetch(path, { method: body === undefined ? "GET" : "POST", headers: { "X-Colbert-Token": TOKEN, "Content-Type": "application/json" },
+                                body: body === undefined ? undefined : JSON.stringify(body) });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok || j.ok === false) throw new Error(j.error || ("HTTP " + r.status));
+  return j;
+}
+async function act(path, body, ok) {
+  try { const r = await api(path, body || {}); if (ok) toast(ok); poll(); return r; } catch (e) { toast(e.message); }
+}
+
+// ---------------------------------------------------------------- tabs
+function show(name) {
+  if (!$("t-" + name)) return;
+  tab = name;
+  for (const x of $("tabs").children) x.classList.toggle("on", x.dataset.tab === name);
+  for (const s of document.querySelectorAll("section")) s.classList.toggle("hide", s.id !== "t-" + name);
+  if (location.hash !== "#" + name) history.replaceState(null, "", "#" + name);
+  render();
+}
+$("tabs").addEventListener("click", (e) => { const b = e.target.closest("button"); if (b) show(b.dataset.tab); });
+window.addEventListener("hashchange", () => show(location.hash.slice(1)));
+if (location.hash) show(location.hash.slice(1));
+
+// ---------------------------------------------------------------- rendering
+const STATUS = { running: "Working", paused: "Paused", idle: "Ready", validating: "Checking devices", waiting: "Waiting",
+                 stopping: "Saving progress", error: "Needs attention", starting: "Starting", stopped: "Stopped" };
+
+function render() {
+  if (!S) return;
+  $("dot").className = "dot " + S.status;
+  $("pilltext").textContent = STATUS[S.status] || S.status;
+  $("pill").title = S.status_text;
+  const go = $("go");
+  go.textContent = S.wanted ? "Pause" : (S.task ? "Resume" : "Start");
+  go.disabled = !S.engine;
+  renderAlerts();
+  if (tab === "overview") renderOverview();
+  if (tab === "work") renderWork();
+  if (tab === "devices") renderDevices();
+  if (tab === "results") renderResults();
+  if (tab === "log") { const el = $("log"); const atEnd = el.scrollTop + el.clientHeight >= el.scrollHeight - 20;
+    el.textContent = S.log.join("\n"); if (atEnd) el.scrollTop = el.scrollHeight; }
+  if (tab === "settings") renderSettings();
+}
+
+function renderAlerts() {
+  let h = "";
+  const p = S.prime_alert;
+  const known = p && (p.known || (p.k === S.known_prime[0] && p.n === S.known_prime[1]));
+  if (p && known) h += `<div class="alert good"><b>End-to-end check passed</b>${num(p.k, p.n)}, found by Seventeen or Bust in 2002,
+    was proven prime on this computer. The whole pipeline works here: engine, device, error checking and checkpoints.
+    <button class="small" onclick="act('/api/dismiss_prime')">OK</button></div>`;
+  else if (p) h += `<div class="prime"><h2>This test says ${num(p.k, p.n)} is prime</h2>
+    <p>${[21181, 22699, 24737, 55459, 67607].includes(p.k) ? "If it holds up, this settles one of the five remaining cases of the Sierpiński problem. " : ""}<b>Please don't announce it yet.</b></p>
+    <ol class="small-t">${p.source === "ledger" ? "<li>The project has scheduled an independent double check on another computer.</li>" :
+      "<li>Re-test it on a different computer, ideally with different software (LLR2 or PRST).</li>"}
+    <li>Keep the result line from the Results tab, and the log.</li><li>Contact the project before saying anything publicly.</li></ol>
+    <button class="small" onclick="act('/api/dismiss_prime')">Got it</button></div>`;
+  if (S.status === "error") h += `<div class="alert bad"><b>Needs attention</b>${esc(S.status_text)}</div>`;
+  else if (S.status === "waiting") h += `<div class="alert warn"><b>Waiting</b>${esc(S.status_text)}</div>`;
+  if (!S.engine) h += `<div class="alert bad"><b>The engine isn't available</b>${esc(S.engine_error)}${S.can_build ?
+     ' <button class="small" onclick="build()">Build it now</button>' : ""}</div>`;
+  if (S.ledger_note) h += `<div class="alert good"><b>Message from the project</b>${esc(S.ledger_note)}</div>`;
+  if (S.pending_uploads) h += `<div class="alert warn"><b>${S.pending_uploads} result(s) waiting to upload</b>They are saved and will be sent when the ledger is reachable.</div>`;
+  $("alerts").innerHTML = h;
+}
+
+function renderOverview() {
+  const t = S.task, L = S.live || {};
+  const el = $("now");
+  if (!t && S.settings.mode === "ledger" && S.settings.ledger_url && !S.settings.worker_id) {
+    // first run: one field and one button, then work starts
+    if (!$("ob-name")) el.innerHTML = `<div class="empty"><div class="number">Join the project</div>
+      <p class="mut">Your computer will test numbers handed out by the project's ledger, alongside everyone else's.
+        Progress is saved as it goes, so you can pause or close the app whenever you like.</p>
+      <div class="row" style="justify-content:center;max-width:460px;margin:16px auto 0">
+        <input id="ob-name" maxlength="40" placeholder="Your name or handle" style="flex:1;min-width:220px">
+        <button class="primary" id="ob-join">Join and start</button></div>
+      <p class="mut small-t" style="margin-top:14px">Or test numbers of your own on the <a href="#work">Work</a> tab.</p></div>`;
+    $("ob-join").onclick = async () => {
+      const name = $("ob-name").value.trim();
+      if (!name) { toast("Enter a name first"); $("ob-name").focus(); return; }
+      const r = await act("/api/join", { url: S.settings.ledger_url, owner: name, invite: S.settings.invite || "" });
+      if (r) act("/api/start", {}, "Joined. Checking this computer, then starting.");
+    };
+    $("ob-name").onkeydown = (e) => { if (e.key === "Enter") $("ob-join").click(); };
+    $("speedcard").classList.add("hide");
+    $("projcard").classList.add("hide");
+    return;
+  }
+  if (!t) {
+    const mode = S.settings.mode === "ledger" ? "the project's next number" : (S.queue_len ? `${S.queue_len} number(s) from your list` : null);
+    el.innerHTML = `<div class="empty"><div class="number">${S.status === "validating" ? "Checking this computer" : "Nothing running"}</div>
+      <p class="mut">${esc(S.status_text)}</p>
+      <p class="mut small-t">${mode ? "Start will test " + esc(mode) + "." : "Add numbers or join the project on the Work tab."}</p></div>`;
+    $("speedcard").classList.add("hide");
+  } else if (L.phase === "pm1") {
+    // P-1 factoring before the test
+    const total = L.total || 0, it = L.iteration || 0, pct = total ? 100 * it / total : 0;
+    const ms = L.ms_per_iter_recent || L.ms_per_iter || 0, eta = S.eta_seconds, running = S.status === "running";
+    el.innerHTML = `
+      <div class="mut small-t">${running ? "Looking for a factor first" : "Current number"} · P−1 factoring, stage ${esc(L.stage || 1)} of 2</div>
+      <div class="number">${num(t.k, t.n)}</div>
+      <div class="mut small-t">A factor proves the number composite, so it would need no test at all.
+        ${L.probability ? "Chance of finding one: " + (100 * L.probability).toFixed(0) + "%." : ""}</div>
+      <div class="bar"><div style="width:${pct.toFixed(3)}%"></div></div>
+      <div class="prog-row"><span class="pct">${pct.toFixed(pct < 10 ? 2 : 1)}%</span>
+        <span class="mut">${total ? fmt(it) + " of " + fmt(total) + " steps" : "starting…"}</span></div>
+      <div class="grid">
+        <div class="tile"><div class="k">Speed</div><div class="v">${ms ? ms.toFixed(2) + " ms" : "—"}</div>
+          <div class="s">${ms ? "per step" : (running ? "measuring…" : "not running")}</div></div>
+        <div class="tile"><div class="k">Time left</div><div class="v">${running && eta ? dur(eta) : "—"}</div>
+          <div class="s">${running && eta ? "then the Proth test, unless a factor turns up" : (running ? "estimating…" : "paused")}</div></div>
+        <div class="tile"><div class="k">Bounds</div><div class="v">${L.b1 ? fmt(L.b1) : "—"}</div>
+          <div class="s">${L.b2 ? "B1 · B2 " + fmt(L.b2) : ""}</div></div>
+        <div class="tile"><div class="k">Progress saved</div><div class="v">${L.checkpoint === "resumed" ? "resumed" : "every 10 min"}</div>
+          <div class="s">safe to pause</div></div>
+      </div>
+      <p class="mut small-t" style="margin:14px 0 0">${S.device ? esc(S.device.label) : ""}${S.engine ? " · engine " + esc(S.engine.version) : ""}${L.N ? " · transform " + fmt(L.N) + " words" : ""}</p>`;
+    $("speedcard").classList.add("hide");
+  } else {
+    const total = L.total || (t.n - 1), it = L.iteration || 0, pct = total ? 100 * it / total : 0;
+    const ms = L.ms_per_iter_recent || L.ms_per_iter || 0;
+    const eta = S.eta_seconds;
+    const kindText = { first: "first test for the project", dc: "double check of another computer's result",
+                       tiebreak: "tie-break between disagreeing results", local: "from your list" }[t.kind] || "";
+    const running = S.status === "running";
+    el.innerHTML = `
+      <div class="mut small-t">${running ? "Now testing" : "Current number"}${kindText ? " · " + esc(kindText) : ""}</div>
+      <div class="number">${num(t.k, t.n)}</div>
+      <div class="mut small-t">${fmt(S.digits)} digits · prime if a<sup>(P−1)/2</sup> ≡ −1 (mod P)</div>
+      <div class="bar"><div style="width:${pct.toFixed(3)}%"></div></div>
+      <div class="prog-row"><span class="pct">${pct.toFixed(pct < 10 ? 3 : 2)}%</span>
+        <span class="mut">${fmt(it)} of ${fmt(total)} squarings</span></div>
+      <div class="grid">
+        <div class="tile"><div class="k">Speed</div><div class="v">${ms ? ms.toFixed(ms < 1 ? 3 : 2) + " ms" : "—"}</div>
+          <div class="s">${ms ? "per squaring · " + fmt(Math.round(1000 / ms)) + "/s" : (running ? "measuring…" : "not running")}</div></div>
+        <div class="tile"><div class="k">Time left</div><div class="v">${running && eta ? dur(eta) : "—"}</div>
+          <div class="s">${running && eta ? "done " + esc(when(S.now + eta)) : (running ? "estimating…" : "paused")}</div></div>
+        <div class="tile"><div class="k">Error checks</div><div class="v">${fmt(L.checks_passed || 0)} passed</div>
+          <div class="s">${L.rollbacks ? '<span class="tag warn">' + fmt(L.rollbacks) + " corrected</span>" : "none needed correcting"}</div></div>
+        <div class="tile"><div class="k">Progress saved</div><div class="v">${L.last_verified_at ? ago(L.last_verified_at) : (L.resumed_from ? "resumed" : "not yet")}</div>
+          <div class="s">${L.verified_iteration ? "at " + fmt(L.verified_iteration) + " · safe to pause" : "first save soon"}</div></div>
+      </div>
+      <p class="mut small-t" style="margin:14px 0 0">${S.device ? esc(S.device.label) : ""}${S.engine ? " · engine " + esc(S.engine.version) : ""}
+        · Gerbicz block ${esc(t.gerbicz)}${L.N ? " · transform " + fmt(L.N) + " words" : ""}</p>`;
+    renderChart();
+  }
+  const pc = $("projcard"), P = S.project || {};
+  if (S.settings.mode === "ledger" && (P.candidates || P._error)) {
+    pc.classList.remove("hide");
+    const c = P.counts || {}, done = (c.done || 0) + (c.verified || 0) + (c.factored || 0);
+    pc.innerHTML = `<h2>The project</h2>${P._error ? `<p class="mut small-t">${esc(P._error)}</p>` : ""}
+      <div class="grid">
+        <div class="tile"><div class="k">Settled</div><div class="v">${fmt(done)}</div><div class="s">of ${fmt(P.candidates)} numbers</div></div>
+        <div class="tile"><div class="k">Tested up to</div><div class="v">n = ${fmt(P.tested_through_n)}</div><div class="s">every number below has a result</div></div>
+        <div class="tile"><div class="k">Last 24 hours</div><div class="v">${fmt(P.tests_last_24h)}</div><div class="s">${fmt(P.active_assignments)} running now</div></div>
+        <div class="tile"><div class="k">Your results</div><div class="v">${fmt(S.history.filter(h => h.source === "ledger" && h.result).length)}</div>
+          <div class="s">from this computer</div></div>
+      </div><p class="mut small-t" style="margin:12px 0 0">Ledger: <a href="${esc(S.settings.ledger_url)}" target="_blank" rel="noopener">${esc(S.settings.ledger_url)}</a>
+      ${P._at ? " · updated " + ago(P._at) : ""}</p>`;
+  } else pc.classList.add("hide");
+}
+
+function renderChart() {
+  const pts = S.rate || [];
+  const card = $("speedcard");
+  if (pts.length < 3) { card.classList.add("hide"); return; }
+  card.classList.remove("hide");
+  const W = 900, H = 120, padL = 44, padB = 18, padT = 8;
+  const t0 = pts[0][0], t1 = pts[pts.length - 1][0];
+  const vs = pts.map(p => p[1]).sort((a, b) => a - b);
+  // robust range, at least ±10% around the median so ordinary jitter doesn't look like a cliff
+  const med = vs[Math.floor(vs.length / 2)];
+  let lo = Math.min(vs[Math.floor(vs.length * 0.02)], med * 0.9), hi = Math.max(vs[Math.ceil(vs.length * 0.98) - 1], med * 1.1);
+  const x = (t) => padL + (W - padL - 4) * (t1 > t0 ? (t - t0) / (t1 - t0) : 1);
+  const y = (v) => padT + (H - padT - padB) * (1 - (Math.min(hi, Math.max(lo, v)) - lo) / (hi - lo));
+  const d = pts.map((p, i) => (i ? "L" : "M") + x(p[0]).toFixed(1) + " " + y(p[1]).toFixed(1)).join(" ");
+  const f = (v) => v < 1 ? v.toFixed(3) : v.toFixed(2);
+  $("chart").innerHTML = `<line x1="${padL}" x2="${W}" y1="${y(hi)}" y2="${y(hi)}" stroke="var(--line)"/>
+    <line x1="${padL}" x2="${W}" y1="${y(lo)}" y2="${y(lo)}" stroke="var(--line)"/>
+    <text x="0" y="${y(hi) + 4}">${f(hi)}</text><text x="0" y="${y(lo) + 4}">${f(lo)}</text>
+    <text x="${padL}" y="${H - 2}">${esc(dur(S.now - t0))} ago</text><text x="${W - 30}" y="${H - 2}">now</text>
+    <path d="${d}" fill="none" stroke="var(--chart)" stroke-width="2" vector-effect="non-scaling-stroke" stroke-linejoin="round"/>`;
+  const last = pts[pts.length - 1][1], avg = pts.reduce((a, p) => a + p[1], 0) / pts.length;
+  $("speedsub").textContent = `Milliseconds per squaring (lower is faster). Now ${f(last)}, average ${f(avg)} over ${dur(t1 - t0)}.`;
+}
+
+function keepInput(id, value) {
+  const el = $(id);
+  if (document.activeElement !== el && !el.dataset.dirty) el.value = value == null ? "" : value;
+}
+for (const id of ["w-url", "w-owner", "w-invite", "s-worker_name", "s-cpu_threads", "s-checkpoint_minutes", "s-engine_path", "s-extra_args"])
+  $(id).addEventListener("input", () => { $(id).dataset.dirty = "1"; });
+
+function renderWork() {
+  const st = S.settings;
+  $("c-ledger").classList.toggle("on", st.mode === "ledger");
+  $("c-local").classList.toggle("on", st.mode === "local");
+  for (const r of document.querySelectorAll('input[name="mode"]')) r.checked = r.value === st.mode;
+  keepInput("w-url", st.ledger_url); keepInput("w-owner", st.owner); keepInput("w-invite", st.invite);
+  $("w-joined").textContent = st.worker_id ? "Joined as worker " + st.worker_id : "";
+  $("w-qn").textContent = S.queue_len ? `(${S.queue_len})` : "(empty)";
+  const cur = S.task && S.task.source === "local" ? S.task : null;
+  $("w-queue").innerHTML = S.queue.length ? "<tr><th>Number</th><th class=num>Digits</th><th></th></tr>" + S.queue.map((q) =>
+    `<tr><td>${num(q[0], q[1])}</td><td class=num>${fmt(Math.floor(q[1] * 0.30103) + String(q[0]).length)}</td>
+     <td>${cur && cur.k === q[0] && cur.n === q[1] ? '<span class="tag good">in progress</span>' : ""}</td></tr>`).join("") :
+    '<tr><td class="mut">No numbers yet.</td></tr>';
+}
+
+function renderDevices() {
+  const rows = S.devices.map((d) => {
+    const v = d.validation;
+    let test = '<span class="tag">not checked</span>', speed = "—", per = "—";
+    if (v) {
+      test = v.selftest ? `<span class="tag good">passed ${v.passed}/${v.total}</span>` : `<span class="tag bad" title="${esc(v.error)}">failed</span>`;
+      if (v.ms_per_iter) { speed = v.ms_per_iter.toFixed(v.ms_per_iter < 1 ? 3 : 2) + " ms"; per = dur(v.hours_per_test * 3600); }
+      else if (v.selftest && v.error) speed = `<span class="tag bad" title="${esc(v.error)}">failed</span>`;
+    }
+    const best = S.device && S.device.id === d.id;
+    return `<tr><td>${esc(d.label)}${v && v.error ? `<div class="mut small-t">${esc(v.error)}</div>` : ""}</td><td>${test}</td>
+      <td class=num>${speed}</td><td class=num>${per}</td>
+      <td>${d.in_use ? '<span class="tag good">in use</span>' : best ? '<span class="tag">chosen</span>' : ""}</td></tr>`;
+  }).join("");
+  $("d-table").innerHTML = `<tr><th>Device</th><th>Self-test</th><th class=num>Per squaring</th><th class=num>One leading-edge test</th><th></th></tr>` +
+    (rows || '<tr><td class="mut" colspan=5>No engine loaded.</td></tr>');
+  const sel = $("d-choice");
+  if (document.activeElement !== sel) {
+    sel.innerHTML = `<option value="auto">Automatic: the fastest that passes</option>` +
+      S.devices.map((d) => `<option value="${esc(d.id)}">${esc(d.label)}</option>`).join("");
+    sel.value = S.settings.device;
+  }
+  const V = S.validation || {};
+  $("d-progress").textContent = V.running ? `Checking ${V.device}: ${V.step} (${dur(Date.now() / 1000 - V.started)} so far)…` : "";
+  const e = S.engine;
+  $("e-info").innerHTML = e ? `<table><tr><td class="mut">Build</td><td><code>${esc(e.version)}</code></td></tr>
+      <tr><td class="mut">Interface</td><td>protocol ${esc(e.protocol)} · backends ${esc(e.backends.join(", "))}</td></tr>
+      <tr><td class="mut">File</td><td><code>${esc(e.path)}</code></td></tr><tr><td class="mut">App</td><td>${esc(S.app_version)}</td></tr></table>`
+    : `<p>${esc(S.engine_error)}</p>`;
+  $("e-buildrow").classList.toggle("hide", !S.can_build);
+}
+
+function renderResults() {
+  const H = S.history;
+  if (!H.length) { $("r-table").innerHTML = '<tr><td class="mut">No results yet.</td></tr>'; return; }
+  $("r-table").innerHTML = "<tr><th>Number</th><th>Result</th><th>Residue (res64) or factor</th><th class=num>Time</th><th>Device</th><th>Ledger</th><th>Finished</th></tr>" +
+    H.map((h) => {
+      const res = h.result === "PRIME" ? '<span class="tag good">PRIME</span>' : h.result === "factor" ? '<span class="tag good">factor found</span>' :
+        h.result ? esc(h.result) : `<span class="tag bad" title="${esc(h.error)}">failed</span>`;
+      const led = h.source !== "ledger" ? '<span class="mut">local</span>' : /refused/.test(h.ledger) ? `<span class="tag bad">${esc(h.ledger)}</span>` :
+        h.ledger === "uploading" ? '<span class="tag warn">uploading</span>' : `<span class="tag good">${esc(h.ledger)}</span>`;
+      return `<tr><td>${num(h.k, h.n)}</td><td>${res}</td><td><code>${esc(h.result === "factor" ? h.factor : h.res64)}</code></td><td class=num>${dur(h.seconds)}</td>
+        <td class="small-t">${esc(h.device)}</td><td>${led}</td><td class="small-t">${esc(new Date(h.at * 1000).toLocaleString())}</td></tr>`;
+    }).join("");
+}
+
+function renderSettings() {
+  const st = S.settings;
+  for (const k of ["worker_name", "cpu_threads", "checkpoint_minutes", "engine_path", "extra_args"]) keepInput("s-" + k, st[k]);
+  if (document.activeElement !== $("s-autostart")) $("s-autostart").checked = !!st.autostart;
+  if (document.activeElement !== $("s-pm1")) $("s-pm1").checked = st.pm1 !== false;
+}
+
+// ---------------------------------------------------------------- actions
+$("go").onclick = () => S && (S.wanted ? act("/api/pause", {}, "Pausing: progress is being saved") : act("/api/start", {}, "Starting"));
+$("w-join").onclick = async () => {
+  const r = await act("/api/join", { url: $("w-url").value, owner: $("w-owner").value, invite: $("w-invite").value }, "Joined. Press Start to begin.");
+  if (r) for (const id of ["w-url", "w-owner", "w-invite"]) delete $(id).dataset.dirty;
+};
+$("w-addbtn").onclick = async () => { const r = await act("/api/add", { text: $("w-add").value }); if (r) { toast(r.result + " added"); $("w-add").value = ""; } };
+$("w-known").onclick = () => S && act("/api/add", { text: S.known_prime.join(" ") }, "Added 46157·2^698207+1, a prime found in 2002");
+$("w-clear").onclick = () => act("/api/clear_queue", {}, "List cleared");
+$("w-uselocal").onclick = () => act("/api/settings", { mode: "local" }, "Using your list");
+for (const r of document.querySelectorAll('input[name="mode"]'))
+  r.addEventListener("change", () => act("/api/settings", { mode: r.value }, r.value === "ledger" ? "Using the project ledger" : "Using your list"));
+$("d-check").onclick = () => act("/api/validate", { device: "all" }, "Checking every device");
+$("d-choice").onchange = () => act("/api/settings", { device: $("d-choice").value }, "Device choice saved");
+$("e-build").onclick = () => build();
+async function build() { toast("Building the engine; this can take a minute…"); await act("/api/build", {}, "Engine built"); }
+$("s-save").onclick = async () => {
+  const b = { worker_name: $("s-worker_name").value, cpu_threads: Number($("s-cpu_threads").value || 0),
+              checkpoint_minutes: Number($("s-checkpoint_minutes").value || 10), autostart: $("s-autostart").checked, pm1: $("s-pm1").checked,
+              engine_path: $("s-engine_path").value, extra_args: $("s-extra_args").value };
+  const r = await act("/api/settings", b, "Settings saved");
+  if (r) for (const k of Object.keys(b)) delete $("s-" + k).dataset.dirty;
+};
+$("s-quit").onclick = async () => { if (!confirm("Save progress and quit Colbert?")) return;
+  await act("/api/quit", {}); document.body.innerHTML = '<div class="wrap"><div class="card empty"><div class="number">Colbert has stopped</div><p class="mut">Progress is saved. Open the app again to continue.</p></div></div>'; };
+
+// ---------------------------------------------------------------- polling
+let failures = 0;
+async function poll() {
+  try { const r = await fetch("/api/state", { headers: { "X-Colbert-Token": TOKEN } }); if (r.ok) { S = await r.json(); render(); } } catch (e) {}
+}
+async function loop() {
+  try {
+    const r = await fetch("/api/state", { headers: { "X-Colbert-Token": TOKEN } });
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    S = await r.json(); failures = 0; render();
+  } catch (e) {
+    if (++failures === 3) { $("pilltext").textContent = "App not responding"; $("dot").className = "dot error"; }
+  }
+  setTimeout(loop, document.hidden ? 5000 : 1500);
+}
+loop();
+</script>
+</body>
+</html>

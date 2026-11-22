@@ -1,0 +1,127 @@
+# Build and check the engine on Linux, macOS and Windows; test the ledger; bundle the app with
+# the engine for each system. On a published GitHub release the bundles are attached to it.
+#
+# NOT YET RUN: written and syntax-checked locally, but GitHub Actions has not executed it.
+name: build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+  release:
+    types: [published]
+
+jobs:
+  ledger:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - name: ledger tests (SQLite)
+        run: python -m unittest discover -s ledger/tests -t . -v
+
+  engine-linux:
+    runs-on: ubuntu-22.04            # older glibc: the binary runs on more distributions
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }     # git describe needs history and tags
+      - run: sudo apt-get update && sudo apt-get install -y build-essential libgmp-dev ocl-icd-opencl-dev opencl-headers pocl-opencl-icd
+      - run: make ARCH=-march=x86-64-v2 colbert colbert-cpu
+      - run: ./colbert version && ./colbert devices
+      - run: ./colbert selftest
+      - run: ./colbert selftest --backend ocl              # PoCL: the GPU code path on the CPU
+      - run: python3 tools/check_protocol.py ./colbert
+      - run: python3 tools/check_protocol.py ./colbert --backend ocl
+      - run: python3 tools/check_protocol.py ./colbert-cpu
+      - uses: actions/upload-artifact@v4
+        with: { name: engine-linux-x64, path: "colbert\ncolbert-cpu" }
+
+  engine-macos:
+    runs-on: macos-14                # Apple Silicon
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - run: brew install gmp libomp
+      - run: make ARCH=-mcpu=apple-m1 STATIC=1 colbert colbert-cpu
+      - name: no Homebrew libraries linked
+        run: "! otool -L colbert colbert-cpu | grep -i homebrew"
+      - run: ./colbert version && ./colbert selftest
+      - run: python3 tools/check_protocol.py ./colbert
+      - uses: actions/upload-artifact@v4
+        with: { name: engine-macos-arm64, path: "colbert\ncolbert-cpu" }
+
+  engine-windows:
+    runs-on: windows-latest
+    defaults:
+      run: { shell: "msys2 {0}" }
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          install: >-
+            make git mingw-w64-ucrt-x86_64-gcc mingw-w64-ucrt-x86_64-gmp
+            mingw-w64-ucrt-x86_64-opencl-icd mingw-w64-ucrt-x86_64-opencl-headers
+      - run: make ARCH=-march=x86-64-v2 colbert colbert-cpu
+      - name: collect runtime DLLs next to the binaries
+        run: |
+          mkdir -p out && cp colbert.exe colbert-cpu.exe out/
+          # MinGW runtime, GMP and OpenMP, plus the Khronos OpenCL ICD loader (Apache-2.0), so the
+          # engine starts even on a computer without a GPU driver (it then lists no OpenCL devices)
+          for f in $(ldd colbert.exe colbert-cpu.exe | awk '/ucrt64/ {print $3}' | sort -u); do cp "$f" out/; done
+          ls -la out
+      - run: out/colbert.exe version && out/colbert.exe selftest
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - name: protocol contract
+        shell: pwsh
+        run: python tools/check_protocol.py out/colbert.exe
+      - uses: actions/upload-artifact@v4
+        with: { name: engine-windows-x64, path: out/ }
+
+  app:
+    needs: [ledger, engine-linux, engine-macos, engine-windows]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-22.04, engine: engine-linux-x64, bundle: colbert-linux-x64, windowed: "" }
+          - { os: macos-14, engine: engine-macos-arm64, bundle: colbert-macos-arm64, windowed: "--windowed" }
+          - { os: windows-latest, engine: engine-windows-x64, bundle: colbert-windows-x64, windowed: "--windowed" }
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - uses: actions/download-artifact@v4
+        with: { name: "${{ matrix.engine }}", path: app/engine }
+      - name: restore execute permission (artifacts drop it)
+        if: runner.os != 'Windows'
+        run: chmod +x app/engine/*
+      - run: pip install "pyinstaller>=6.11,<7"
+      - name: bundle
+        shell: bash
+        run: |
+          pyinstaller --noconfirm --onedir --name Colbert ${{ matrix.windowed }} \
+            --add-data "app/colbert_app/ui:colbert_app/ui" --add-binary "app/engine/*:engine" app/run.py
+      - name: smoke test the bundle (engine found, protocol understood)
+        if: runner.os == 'Linux'
+        run: |
+          dist/Colbert/Colbert --version
+          python3 -c "import sys; sys.path.insert(0,'app'); from colbert_app.engine import Engine; e=Engine('app/engine/colbert').probe(); print(e.version, e.protocol, e.backends)"
+      - name: zip
+        shell: bash
+        run: |
+          cd dist
+          if [ "$RUNNER_OS" = "Windows" ]; then 7z a "../${{ matrix.bundle }}.zip" Colbert; \
+          elif [ "$RUNNER_OS" = "macOS" ]; then ditto -c -k --keepParent Colbert.app "../${{ matrix.bundle }}.zip"; \
+          else zip -qr "../${{ matrix.bundle }}.zip" Colbert; fi
+      - uses: actions/upload-artifact@v4
+        with: { name: "${{ matrix.bundle }}", path: "${{ matrix.bundle }}.zip" }
+      - name: attach to the release
+        if: github.event_name == 'release'
+        uses: softprops/action-gh-release@v2
+        with: { files: "${{ matrix.bundle }}.zip" }
