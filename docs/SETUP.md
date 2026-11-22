@@ -7,7 +7,7 @@ How to build colbert, check it, and run tests. For measuring GPU speed, see
 
 | | required | notes |
 |---|---|---|
-| OS | Linux x86-64 | Developed and tested on Ubuntu 24.04. Windows: use WSL2 (NVIDIA's WSL driver exposes OpenCL). macOS: builds, but see the Apple note below. |
+| OS | Linux x86-64, macOS, Windows | Developed on Ubuntu 24.04; also tested on macOS 26 (Apple Silicon). Windows: WSL2 (NVIDIA's WSL driver exposes OpenCL), or a native MSYS2 build (below; not yet tested). |
 | Compiler | g++ 9+ or clang 10+, C++17, OpenMP | `build-essential` |
 | GMP | libgmp + libgmpxx | used for setup, conversions and checks, not in the inner loop |
 | OpenCL | ICD loader + headers + a GPU driver with OpenCL 1.2 | only for the GPU backend; `make OPENCL=0` builds without it |
@@ -17,8 +17,9 @@ The GPU needs 64-bit integer support (every current NVIDIA, AMD and Intel discre
 has it). It does **not** need fast double precision; the method was chosen for that reason.
 
 **Apple Silicon:** Apple's GPUs have no native 64-bit integer multiply, and Apple has
-deprecated OpenCL. colbert should run there, but slowly, and speed numbers from a Mac say
-nothing about NVIDIA or AMD hardware.
+deprecated OpenCL (it still ships). colbert passes every check on an M4 Pro GPU, at 3.03 ms per
+squaring at the leading edge ([RESULTS.md](RESULTS.md)). That number says little about NVIDIA
+or AMD hardware.
 
 ## Install dependencies
 
@@ -45,6 +46,19 @@ Check:
 clinfo -l
 ```
 
+macOS (Homebrew; OpenCL is part of the system):
+
+```bash
+xcode-select --install; brew install gmp libomp
+```
+
+Windows without WSL, in an MSYS2 UCRT64 shell (the build is set up for this but hasn't been
+tested yet; the GPU driver provides `OpenCL.dll`):
+
+```bash
+pacman -S make mingw-w64-ucrt-x86_64-gcc mingw-w64-ucrt-x86_64-gmp mingw-w64-ucrt-x86_64-opencl-icd mingw-w64-ucrt-x86_64-opencl-headers
+```
+
 ## Build
 
 ```bash
@@ -65,6 +79,22 @@ Without OpenCL:
 make OPENCL=0
 ```
 
+`make colbert-cpu` builds a CPU-only companion binary next to `colbert`. The app falls back to
+it on computers where the OpenCL loader library is missing, where `colbert` wouldn't start at
+all.
+
+For binaries that run on other people's computers, replace `-march=native`, which produces
+code that crashes on older CPUs, and link statically:
+
+```bash
+make ARCH=-march=x86-64-v2 STATIC=1 colbert colbert-cpu      # Linux, Windows (MSYS2)
+make ARCH=-mcpu=apple-m1 STATIC=1 colbert colbert-cpu        # macOS, Apple Silicon
+```
+
+The version stamped into every result comes from `git describe`. Builds from uncommitted
+engine changes end in `-dirty.<hash of the diff>`, so each edit is a distinct build. The
+ledger can be set to refuse these.
+
 ## Check that it works
 
 ```bash
@@ -77,14 +107,15 @@ Lists OpenCL devices with their index. A GPU shows `[GPU]`; pass `--device I` to
 make check
 ```
 
-Runs the CPU self-test (59 checks against GMP, a few seconds) and the Python model. Every
-line should start with `ok`.
+Runs the CPU self-test (64 checks against GMP, under a minute), the Python model, and
+`tools/check_protocol.py`, which checks the machine interface the app relies on
+([ENGINE_PROTOCOL.md](ENGINE_PROTOCOL.md)). Every line should start with `ok`.
 
 ```bash
 ./colbert selftest --backend ocl
 ```
 
-Runs the same 59 checks through the OpenCL kernels on the default device. **This is the
+Runs the same 64 checks through the OpenCL kernels on the default device. **This is the
 first thing to run on a new GPU.** A failure means the GPU's compiler or hardware disagrees
 with the reference, and no result from that device should be trusted until it is fixed.
 
@@ -125,16 +156,23 @@ Other commands:
 | `./colbert test K N --primes 1` | use only the 61-bit field. Faster per point, but fits only small sizes |
 | `./colbert test K N --size N` | force a transform size (must pass the overflow bound) |
 | `./colbert test K N --gerbicz L` | Gerbicz block length (default about √(n/2), capped at 1000) |
+| `./colbert pm1 K N` | P−1 factoring, bounds chosen from `--sieve-bits` (default 32); see [PM1.md](PM1.md) |
+| `./colbert bench K N ITERS --backend ocl --profile` | time per GPU kernel |
 
 ## Candidates
 
 ```bash
-./sieve 47856007 57500000 1e9 candidates.txt
+./sieve 47856007 57500000 1e9 candidates.txt [factors.txt]
 ```
 
 Sieves `n` in the range for all five `k`, removing every candidate with a prime factor up to
 `1e9` (the limit is 2^32), and prints expected prime counts. On 2 cores this took 36 minutes
-for that range. The output is a valid worktodo file.
+for that range. The output is a valid worktodo file. The optional `factors.txt` lists
+`k n p` for each candidate removed by a prime `p ≥ 20000`, so every removal can be checked
+on its own: `(k * pow(2, n, p) + 1) % p == 0` in Python.
+
+To take newly factored candidates out of the ledger after a deeper sieve, pass the factor
+file (or any `k n` list) to `python3 -m ledger admin remove` ([LEDGER.md](LEDGER.md)).
 
 The list in `data/` is shallow. **A real search must start from a deep sieve.** PrimeGrid
 has sieved these sequences far beyond 2^32, and testing survivors of a shallow sieve

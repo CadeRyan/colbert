@@ -1,6 +1,8 @@
 # How fast should this be?
 
-**Nothing on this page is a GPU measurement.** No GPU has run colbert yet. These are
+**Nothing on this page is a GPU measurement.** The only GPU colbert has run on so far is an
+Apple M4 Pro (3.03 ms per squaring at the leading edge; [RESULTS.md](RESULTS.md)), which lacks
+native 64-bit multiplies and says little about the GPUs modelled here. These are
 estimates from a first-principles model (`tools/perf_model.py`), anchored where possible to
 numbers PrimeGrid volunteers have published. The GPU benchmark in
 [GPU_BENCHMARKING.md](GPU_BENCHMARKING.md) exists to replace them with measurements.
@@ -15,13 +17,14 @@ At the current Seventeen or Bust leading edge (n ≈ 47.9 million, about 14.4 mi
 | llrCUDA (FP64 IBDWT) on a consumer GPU | yes | **about 3×** | medium: consumer GPUs run FP64 at 1/64 rate, which starves llrCUDA |
 | llrCUDA on a datacenter GPU (H100) | yes | **about 1.4×** | low-medium: both memory-bound there; colbert simply moves less data |
 | LLR2/PRST on a high-end desktop CPU (what PrimeGrid runs today) | no | **about 4–8× per device**; **about 2–3× per kWh** | low: compares an RTX 4090 with an extrapolated 16-core CPU |
-| **today's unoptimized colbert kernels** vs tuned proth20 | yes | **probably about 2× *slower*** | medium: the kernels make ~6× more memory passes than a tuned code |
+| **today's colbert kernels** (four-step, 21 Nov 2026) vs tuned proth20 | yes | **unmeasured; about 2× faster if memory-bound** | low: they move 1.2–1.5× the data the model assumes (2.7× ÷ that ≈ 2×), but on the only GPU measured, arithmetic rather than memory is the limit |
 
 The method's advantage is real but moderate. It is a constant factor of about 2.5–3 against
 the best existing GPU approach. It does not change the order of the cost, and it cannot
 change the number of tests a prime takes (about half a million at these sizes; see
-[RESULTS.md](RESULTS.md)). Collecting that factor requires optimization work that hasn't
-been done yet.
+[RESULTS.md](RESULTS.md)). The kernels now make about as many passes over memory as the
+model assumes, but none of the GPUs modelled here has run them, so the factor is still
+unconfirmed. What is left to do is listed at the end ([What is left](#what-is-left)).
 
 ## Why the data volume decides it
 
@@ -63,33 +66,165 @@ Device figures are approximate published specifications: memory bandwidth 1008 /
 3350 GB/s; FP64 1.3 / 1.6 / 34 TFLOP/s; 32-bit integer multiply roughly half the FP32 rate.
 Real programs reach these bounds only within a factor of about 1.3–2.
 
-## What today's code would do
+## What the code does now (four-step kernels, 21 November 2026)
 
-The current OpenCL kernels were written to be obviously correct, not fast. Per squaring
-they make:
+The first OpenCL kernels were written to be obviously correct: per squaring and per prime,
+5 forward and 5 inverse radix-16 passes over the whole array, separate weight, pointwise and
+carry kernels, and a twiddle read per butterfly from tables as large as the data. About 0.81 GB
+moved per squaring at the leading edge.
 
-* 5 forward and 5 inverse radix-16 passes per prime, each reading and writing the whole
-  array;
-* separate weight, pointwise, and two carry kernels;
-* about one twiddle-table read per butterfly, from tables as large as the data.
+The fast path (`src/kernels.cl`, section `fft2`) replaces them for every size up to N = 2²¹
+words, which covers n up to about 58 million:
 
-That is roughly 35–40 array-sized transfers per prime per squaring, against about 6 for a
-tuned code. Expected result on an RTX 4090: **about 1 ms per squaring, about 13 hours
-per leading-edge test**. A tuned proth20 should land near 0.5 ms. So the first GPU
-benchmark will most likely show colbert *losing* to proth20. That is expected. The
-benchmark's job is to confirm the model's per-pass costs, not to show the final speed.
+1. **Three passes per prime instead of ten.** The 2²⁰-point transform is a four-step 1024 × 1024
+   transform. One work-group does a whole 1024-point sub-transform in registers and local
+   memory. `colfwd` weights the digits and transforms the columns; `rows` transforms the rows,
+   does the pointwise product (including the conjugate-pair "untangle" of the real structure)
+   and the inverse row transform in the same pass; `colinv` finishes the columns.
+2. **Radix-8 butterflies with free twiddles.** w₈ = (1+i)·2^((q_bits−1)/2) is a primitive 8th
+   root of unity in GF(q²) for both Mersenne primes, so a radix-8 butterfly needs only
+   additions and bit rotations. Sub-transforms use 2.25 general multiplies per point instead
+   of 5, with the radix-2 or radix-4 stage last, where it costs least.
+3. **Squaring-specific arithmetic:** complex squaring with two products instead of four, and an
+   untangle specialised for squaring.
+4. **Local memory one 32-bit word per point** (values cross in parts), which doubles to
+   quadruples the work-groups that fit on a GPU core. On the M4 Pro this alone took a squaring
+   from 5.9 to 4.1 ms.
+5. **The carry** computes the eight CRT values of a block independently before the serial
+   chain (1.04 → 0.35 ms on the M4 Pro).
+6. **Weights from two small tables and a rotation** instead of tables as large as the data
+   (2^s mod a Mersenne prime is a rotation): about 56 MiB less read per squaring. Measured
+   equal on the M4 Pro, which is limited by 64-bit arithmetic rather than memory; on by default
+   elsewhere.
+7. A startup self-check against the radix-2 kernels, with automatic fallback.
 
-The optimizations needed to collect the advantage, roughly in order of payoff:
+About 0.2 GB now moves per squaring, a quarter of before. That is 1.2–1.5× the three round
+trips the model above assumes; the range depends on whether the weights come from tables.
 
-1. Fuse passes so each squaring makes ~3 round trips: weight + first passes; middle passes
-   in local memory; last passes + pointwise + inverse first passes.
-2. Generate twiddles on the fly or from small tables, instead of reading a table as large
-   as the data.
-3. Fuse the carry into the last inverse pass and the next squaring's weighting.
-4. Use 3-multiply (Karatsuba) complex products in GF(M61²).
-5. Write radix-3 and radix-7 passes for mixed-radix sizes (another ~14%).
+| Apple M4 Pro, n = 47.9M, N = 2²¹ | ms per squaring | one test |
+|---|---|---|
+| original radix-2 kernels | 5.39 | 72 h |
+| four-step kernels | **3.03** | **40 h** |
 
-PRPLL and genefer already do all of this for their transforms; the structure carries over.
+Where the time goes now (M4 Pro, `bench --profile`):
+
+| kernel | field | ms per squaring | data in and out |
+|---|---|---|---|
+| `rows` | 61-bit | 1.22 | 32 MiB |
+| `colfwd` | 61-bit | 0.52 | digits in, 16 MiB out |
+| `carry1` | both | 0.35 | 24 MiB in, digits out |
+| `colinv` | 61-bit | 0.32 | 32 MiB |
+| `colfwd` | 31-bit | 0.25 | digits in, 8 MiB out |
+| `rows` | 31-bit | 0.21 | 16 MiB |
+| `colinv` | 31-bit | 0.10 | 16 MiB |
+| `carry2` | both | 0.08 | a few words per block |
+
+With weight tables (the Apple default), `colfwd` and `carry1` also read the weights.
+
+In the 61-bit field, `rows` and `colinv` move the same amount of data, but `rows` takes four
+times as long. It does two sub-transforms, the pointwise product and a twiddle, so on this GPU
+arithmetic is the limit, not memory. Measured throughput: 16 G complex multiplications per
+second in GF(M61²), against 95 G in GF(M31²), and 190–215 GB/s of memory bandwidth. The GPU
+has no 64-bit integer multiplier and builds each 64-bit product from 32-bit ones. On GPUs
+limited by memory bandwidth instead, the 4× cut in data moved should count for more. Those
+are the discrete NVIDIA and AMD cards the model above is about, and this is unmeasured.
+
+## What is left
+
+The work is ordered by expected payoff for the project. Only the M4 Pro figures on this page
+are measurements. Everything else is an estimate and is labelled as one.
+
+### Fewer tests: sieve deeper
+
+The cheapest test is one that never has to run. The ledger's list is sieved to 2³², where
+`tools/sieve` stops. Sieving on to 2^b leaves about 32/b of the candidates (Mertens' theorem).
+For the step from 10⁹ to 2³², that predicted 6.6% would be removed, and 6.6% were.
+
+A deeper sieve also leaves fewer factors for P−1 to find, because the two methods find many of
+the same ones, so the net saving is smaller than the share of candidates removed. The "work"
+column counts tests, P−1 and the expected 5% of double checks, using the plans from
+`colbert info --sieve-bits B` at n = 47.9M:
+
+| sieve to | candidates left | P−1 finds a factor | work to cover a range of n | sieve time on this Mac |
+|---|---|---|---|---|
+| 2³² (today) | 100% | 24% | 100% | 7.5 min (measured, 14 cores) |
+| 2³⁶ | 89% | 18% | 96% | ~2 hours |
+| 2⁴⁰ | 80% | 12% | **92%** | **~1 day** |
+| 2⁴⁴ | 73% | 7.7% | 87% | ~2 weeks |
+| 2⁴⁸ | 67% | 4.5% | 82% | ~7 months |
+| 2⁵⁷ (about PrimeGrid's sieve) | 56% | 0.9% | 71% | out of reach for one machine |
+
+The sieve times assume each prime costs what it did in the 2³² run (453 s for 203 million
+primes); the total grows with the number of primes. Before the tool can go past 2³², it needs
+64-bit modular arithmetic: it computes `a * b % p` in 64 bits, which overflows for larger p.
+
+A day of CPU time for 8% less work is the best trade on this page. Each test that isn't
+needed saves 40 GPU-hours on this Mac, and the sieve runs on the CPU while the GPU tests.
+PrimeGrid's own sieve output would save more still, if they will share it. A deeper list goes
+into the ledger with `admin remove`, and the ledger's `sieve_bits` setting must then be raised
+so P−1 plans for the new depth ([LEDGER.md](LEDGER.md)).
+
+### Fewer tests: cheaper P−1 stage 2
+
+**Prime pairing.** Stage 2 can work with x = y + 1/y instead of y. Since
+x^(mD) − x^r = (y^(mD) − y^r)(1 − y^−(mD+r)), with x^j meaning y^j + y^−j, one product covers
+both primes mD − r and mD + r. Only half the stored spectra are
+needed, which leaves room for a larger D. With D = 330 this removes about 13% of stage-2
+products and half the giant steps: about 0.4% of a test per number, out of P−1's 3.7%. It is
+small, and worth doing with the next change to P−1.
+
+### Faster squarings on every GPU
+
+1. **Measure on an NVIDIA or AMD GPU** ([GPU_BENCHMARKING.md](GPU_BENCHMARKING.md)). Every
+   estimate here about memory-bound GPUs depends on it.
+2. **One inverse pass for both fields, with the block carries.** Today `colinv` writes 24 MiB
+   that `carry1` reads straight back. A work-group holding a few adjacent columns (`CPG`
+   already groups them) holds whole carry blocks. It could run both fields' inverse column
+   transforms and `carry1`'s work in the same pass, leaving only `carry2`. That moves a fifth
+   to a quarter less data on memory-bound GPUs.
+3. **Then the next squaring's forward columns in the same pass**, as PRPLL's fused carry
+   kernel does. This needs the carry between blocks handed from one work-group to the next
+   during the pass. A squaring would then be two passes over the data instead of about three
+   plus the digits: roughly half the data moved now. The digits would also be read once,
+   not once per field.
+4. **Mixed-radix sizes** (radix-3 and radix-7 sub-transforms). Every size is a power of two
+   today, so at the leading edge the words carry fewer bits than the bound allows. The next
+   smaller mixed size moves about 14% less data (24.0 → 21.0 MiB, from the model above).
+5. **Four-step kernels for N = 2²² and above** (n above about 58 million), which still use
+   the radix-2 kernels. The fast path takes sub-transforms of at most 1024 points, and
+   2048-point ones would fit in local memory. The ledger's list stops at n = 57.5 million, so
+   this isn't needed yet.
+
+### Faster squarings where 64-bit multiplies are slow
+
+On the M4 Pro, the 61-bit field takes 2.1 of the 3.03 ms, and it is limited by arithmetic.
+GPUs generally build 64-bit multiplies from 32-bit ones, so these steps help elsewhere too,
+but less where memory is the limit.
+
+1. **Karatsuba products in GF(M61²).** `cmul61` uses four 64 × 64-bit products. Three
+   suffice, at the cost of a few additions; the sums fit, since M61 leaves 3 bits spare in a
+   64-bit word. General products are most of the 61-bit field's multiplications.
+2. **Twiddles from full tables.** In both `colfwd` and `rows`, each four-step twiddle is
+   built with a product from two small tables (`tw4`), and so is the untangle's root. Reading
+   them from full tables saves about two products per point per squaring, for one more table
+   read per point. This is the same trade the weights make per device (`COLBERT_WOTF`). For the
+   weights it measured equal on the M4 Pro, so it needs measuring.
+3. **Lazy reduction.** Values in GF(M61) use 61 of 64 bits, so butterfly additions can skip
+   the compare-and-subtract for a level or two.
+4. **Two 31-bit prime fields instead of GF(M61²)**, with Montgomery arithmetic. The estimate
+   is about 1.8× less arithmetic on GPUs with slow 64-bit multiplies. This is the largest
+   change listed: new fields, new bounds and a new CRT. The radix-8 butterflies would no
+   longer be free, because that trick depends on Mersenne primes.
+
+### The CPU engine
+
+The CPU engine (`--backend cpu`, and `colbert-cpu`) is the scalar reference that the GPU code
+is checked against: radix-2 passes, no SIMD, a twiddle read per butterfly. On this Mac's 14
+cores it takes 20.9 ms per squaring, 277 hours per test. For comparison, the estimate for
+PrimeGrid's LLR2 on the same Mac is 3–5 days (x86 code under Rosetta). The obvious steps are
+the four-step radix-8 structure, SIMD for the 31-bit field, and the CPU's native 64-bit
+multiplies for the 61-bit field. The gain is unmeasured. This matters only for computers
+without a usable GPU.
 
 ## Against the CPUs PrimeGrid actually uses
 

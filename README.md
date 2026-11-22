@@ -29,15 +29,16 @@ how confident that claim is.
 |---|---|
 | mathematics | written out and proved in [DESIGN.md](docs/DESIGN.md); modelled in `proto/weighted_ntt.py` |
 | CPU engine | complete; a correctness reference, **not** fast |
-| OpenCL engine | complete, bit-identical to the CPU engine, **has only run on a CPU OpenCL runtime, never on a GPU** |
-| verification | 59/59 self-checks on both engines; the SoB prime 46157·2^698207+1 proven prime; full-size squarings match GMP. See [RESULTS.md](docs/RESULTS.md) |
-| GPU speed | **unmeasured**. Model: a tuned version ≈ 2.5× proth20 on the same GPU; today's unoptimized kernels probably ≈ 2× slower than proth20. See [PERFORMANCE.md](docs/PERFORMANCE.md) |
+| OpenCL engine | complete, bit-identical to the CPU engine. Four-step radix-8 kernels (three passes per prime per squaring), with a startup self-check and the original kernels as fallback. **Not yet run on NVIDIA, AMD or Intel GPUs** |
+| P−1 factoring | stages 1 and 2, on both engines, with bounds chosen from the sieve depth. With the project's list it finds a factor for about 1 number in 4 for under 4% of a test's work. See [PM1.md](docs/PM1.md) |
+| verification | 64/64 self-checks on both engines and both GPU kernel sets; the SoB prime 46157·2^698207+1 proven prime; full-size squarings match GMP. See [RESULTS.md](docs/RESULTS.md) |
+| GPU speed | **unmeasured on the GPUs that matter**. Apple M4 Pro: 3.03 ms per squaring at the leading edge, 40 hours per test (5.39 ms with the original kernels). See [PERFORMANCE.md](docs/PERFORMANCE.md) |
 | a new prime | no. Nothing beyond PrimeGrid's frontier has been tested |
 
 ## Quick start
 
 ```bash
-sudo apt-get install -y build-essential libgmp-dev ocl-icd-opencl-dev opencl-headers clinfo
+sudo apt-get install -y build-essential libgmp-dev ocl-icd-opencl-dev opencl-headers clinfo   # macOS: brew install gmp libomp
 ```
 
 ```bash
@@ -51,18 +52,35 @@ make && make check
 Full instructions: [docs/SETUP.md](docs/SETUP.md). First run on a GPU:
 [docs/GPU_BENCHMARKING.md](docs/GPU_BENCHMARKING.md).
 
+### The app
+
+**No terminal needed:** double-click **Start Colbert.command** (macOS), **Start Colbert.bat**
+(Windows) or **Start Colbert.sh** (Linux). The first time, it installs what the engine needs
+(asking first) and builds it. After that it checks for updates and opens the app. From a
+terminal, `make colbert colbert-cpu && python3 app/run.py` does the same.
+
+The app opens in your browser. The app finds every GPU and CPU on the machine and
+self-tests and times each one. It then runs the fastest, shows progress, speed and time
+left, and saves progress so tests can be paused and resumed. It can test your own numbers,
+or join a shared **ledger** that coordinates many computers with no gaps and no wasted
+repeats. Guide: [docs/APP.md](docs/APP.md). Ledger design and deployment:
+[docs/LEDGER.md](docs/LEDGER.md).
+
 ## Documentation
 
 | document | for |
 |---|---|
 | [EXPLAINER.md](docs/EXPLAINER.md) | anyone: the problem and the idea, without the mathematics |
+| [APP.md](docs/APP.md) | the desktop app: running colbert on any computer, alone or as part of the project |
+| [LEDGER.md](docs/LEDGER.md) | the ledger that coordinates many computers: guarantees, protocol, operations, cost |
+| [PM1.md](docs/PM1.md) | P−1 factoring before each test: how it works, how the bounds are chosen, what it saves |
+| [ENGINE_PROTOCOL.md](docs/ENGINE_PROTOCOL.md) | the engine's machine interface, which the app and ledger rely on, and which tuning must keep |
 | [SETUP.md](docs/SETUP.md) | installing, building, checking and running |
 | [GPU_BENCHMARKING.md](docs/GPU_BENCHMARKING.md) | the protocol for validating and timing on a real GPU |
 | [PERFORMANCE.md](docs/PERFORMANCE.md) | expected speed against proth20, llrCUDA and LLR2, and why |
 | [NOVELTY.md](docs/NOVELTY.md) | prior-art review: what is new, what isn't, with sources |
 | [DESIGN.md](docs/DESIGN.md) | the mathematics, with proofs |
 | [RESULTS.md](docs/RESULTS.md) | everything that has actually been run, and the search economics |
-| [video/](video/README.md) | *The Last Five*: a 12-minute motion-graphics explainer, its voice-over script, and the build |
 
 ## What finding the next prime takes
 
@@ -81,7 +99,8 @@ A faster transform lowers the cost of each test. It can't lower the number of te
 * PrimeGrid runs this search and will test the same numbers. Testing ahead of their
   frontier duplicates work they will redo, and by community convention the range is theirs.
   A faster GPU tester is probably worth most as a contribution to their project.
-* The candidate list in `data/` is shallow (sieved to 10⁹). Start real work from a deep sieve.
+* The candidate lists in `data/` are shallow: the project ledger's list is sieved to 2³², and
+  PrimeGrid's much deeper sieve would remove roughly half of what is left.
 * Confirm any prime with independent software before announcing it.
 
 ## Layout
@@ -92,8 +111,15 @@ A faster transform lowers the cost of each test. It can't lower the number of te
     src/cpu_engine.cpp      OpenMP reference engine
     src/kernels.cl          OpenCL kernels;  src/ocl_engine.cpp  host side
     src/proth.*             Proth test, Gerbicz-Li checking, verified checkpoints
+    src/pm1.*               P-1 factoring (stages 1 and 2), bound selection
+    src/main.cpp            command line, and the --json machine interface (docs/ENGINE_PROTOCOL.md)
+    tools/check_protocol.py contract test for that interface (part of make check)
+    app/                    desktop app (Python standard library): app/run.py
+    ledger/                 work ledger: lease-based assignment, double checks; SQLite or Firestore
+    deploy/ledger/          deploy the ledger to Cloud Run + Firestore, and tear it down
     tools/sieve.cpp         candidate sieve for the five k (p <= 2^32)
     tools/cost_model.py     candidates -> expected primes, GPU-hours, dollars
     tools/perf_model.py     first-principles speed model for colbert, proth20 and FP64 IBDWT
     deploy/gcp-benchmark.sh one-GPU benchmark on Google Cloud (not run)
-    data/                   candidate list for n in [45.5M, 57.5M], sieved to 1e9
+    data/                   candidate lists: n in [45.5M, 57.5M] sieved to 1e9; the ledger's list,
+                            n in [47.9M, 57.5M] sieved to 2^32, and the factors that removed the rest

@@ -36,7 +36,7 @@ the first seconds.
 ./colbert selftest --backend ocl
 ```
 
-Pass: the last line reads `59/59 checks passed on backend ocl`. Anything less: **stop**, and
+Pass: the last line reads `64/64 checks passed on backend ocl`. Anything less: **stop**, and
 save the full output and the OpenCL build log (`--verbose`).
 
 ### 1b. Full-size squarings against GMP (≈5–15 minutes, mostly GMP)
@@ -129,8 +129,9 @@ What to expect, and how to read it:
 
 | observation | meaning |
 |---|---|
-| colbert today is **slower** than proth20, roughly 2× | expected. The kernels are unoptimized (about 6× the memory passes of a tuned code; see PERFORMANCE.md) |
-| colbert ms/iteration ≈ 5–8× the model's lower bound | consistent with the model; tuning should recover most of that |
+| colbert ≈ proth20 or faster | expected with the four-step kernels (three passes per prime, about 0.21 GB per squaring; PERFORMANCE.md) |
+| colbert ms/iteration ≈ 1.5–3× the model's lower bound | consistent with the model; the remaining fusions in PERFORMANCE.md should recover part of that |
+| colbert slower than proth20 | check `bench --profile` (time per kernel) and `bench` with `COLBERT_FFT=radix2`; the startup check may have fallen back to the radix-2 kernels (the `bench` line says which transform is in use) |
 | colbert ≫ 10× the lower bound | something besides memory traffic dominates (kernel launch overhead, or 64-bit multiplies far slower than assumed on this GPU). Worth profiling before optimizing |
 | proth20 ≈ 1.3–2× its lower bound | confirms proth20 is near memory-bound, the premise of the 2.5× estimate |
 | proth20 ≫ 2× its lower bound | proth20 is limited by something else, and the estimate of colbert's advantage must be redone |

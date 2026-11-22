@@ -1,8 +1,49 @@
 # Results so far
 
-Everything below was run on a 4-core cloud VM with no GPU (Intel Xeon 2.1 GHz, 15 GB),
-on 16 November 2026. "OpenCL" means the kernels in `src/kernels.cl` executed by PoCL, a
-CPU implementation of OpenCL. No GPU has run this code yet.
+The first section is the first run on a real GPU, an Apple M4 Pro, on 21 November 2026.
+Everything after it was run on a 4-core cloud VM with no GPU (Intel Xeon 2.1 GHz, 15 GB) on
+16 November 2026. There, "OpenCL" means the kernels in `src/kernels.cl` executed by PoCL, a
+CPU implementation of OpenCL. **No NVIDIA, AMD or Intel GPU has run this code yet.**
+
+## Apple M4 Pro, 21 November 2026
+
+MacBook with an M4 Pro (14 CPU cores, 20 GPU cores, 24 GB unified memory), macOS 26.2,
+Apple OpenCL 1.2 (deprecated by Apple but still shipped), Apple clang 17, engine `1dde3c0-dirty`.
+Apple's GPUs have no native 64-bit integer multiply, so these speeds say little about
+NVIDIA or AMD hardware.
+
+| check | result |
+|---|---|
+| `selftest --backend ocl` on the GPU | **59/59** (17 s) |
+| `selftest` on the CPU engine | 59/59 |
+| 5 consecutive squarings at full size vs GMP, `67607·2^47856023+1` (fold structure) | **match** |
+| 5 consecutive squarings at full size vs GMP, `21181·2^47856020+1` (real structure) | **match** |
+| `46157·2^698207+1` (Seventeen or Bust prime), GPU, end to end | **PRIME**, 3 Gerbicz checks, 0 rollbacks, **136 s** (38 min on the 4-core CPU build) |
+| `tools/check_protocol.py` (stop, resume, rejected checkpoint, residue unchanged by an interruption) | pass on both backends |
+
+| speed at the leading edge (`bench 21181 47856020`, N = 2^21) | ms per squaring | one test |
+|---|---|---|
+| GPU (OpenCL), original radix-2 kernels | 5.19 | 69 hours |
+| GPU (OpenCL), four-step kernels (same day, later) | **3.03** | **40 hours** |
+| CPU engine, 14 threads | 20.9 | 277 hours |
+
+The GPU proves the known prime about 17 times faster than the 4-core cloud CPU did. At the
+leading edge the four-step kernels are 7 times faster than this machine's own 14 CPU cores.
+See PERFORMANCE.md for what changed and where the time goes.
+
+### Four-step kernels and P−1 (21 November 2026, later)
+
+| check | result |
+|---|---|
+| `selftest` on the CPU engine, the four-step GPU kernels, and the radix-2 GPU kernels | **64/64** each (59 as before, plus 5 P−1 cases) |
+| four-step kernels with weights from tables and computed on the fly, 1 and 2 columns per group | 64/64 each |
+| sizes covered by the self-test on the four-step path | 8×8 to 128×256 points, both 61- and 31-bit fields, both weight structures |
+| 4 consecutive squarings at n = 47,900,038 vs GMP, all five k (both structures in both fields) | **match** |
+| a deliberately broken four-step kernel (`FAULT_FFT2`) | caught by the startup check; the engine falls back to radix-2 and still matches GMP |
+| P−1 stage 1 and the stage-2 product vs GMP; D = 2310 and D = 120 | match |
+| P−1 at full size: `55459·2^47900038+1`, B1 = 20,000, B2 = 300,000, stopped in stage 2 and resumed | no factor (as expected at such small bounds); stage-1 step 2.93 ms, stage-2 product 3.47 ms |
+| end to end (ledger + headless app): `55459·2^30226+1` and `46157·2^698207+1` | factor found by P−1 and accepted by the ledger; P−1 found nothing for the prime, which the test then proved prime |
+| `tools/check_protocol.py` (now with P−1 events, stop and resume in stage 2) | pass on both backends |
 
 ## Correctness
 
