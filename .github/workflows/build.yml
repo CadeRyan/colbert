@@ -71,29 +71,25 @@ jobs:
       - run: ./colbert selftest --backend ocl
       - run: python3 tools/check_protocol.py ./colbert --backend ocl
 
-  engine-macos:
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - { os: macos-15, arch: arm64, flags: -mcpu=apple-m1 }
-          - { os: macos-15-intel, arch: x86_64, flags: -march=x86-64-v2 }
-    runs-on: ${{ matrix.os }}
+  engine-macos-intel:
+    # The Apple Silicon engine is built in app-macos itself: GitHub's Apple Silicon machines are
+    # often scarce, so the workflow asks for only one of them.
+    runs-on: macos-15-intel
     env: { MACOSX_DEPLOYMENT_TARGET: "12.0" }
     steps:
       - uses: actions/checkout@v4
         with: { fetch-depth: 0 }
       - run: brew install gmp libomp
-      - run: make STATIC=1 ARCH=${{ matrix.flags }} colbert colbert-cpu
-      - name: no Homebrew libraries linked; built for ${{ matrix.arch }}
+      - run: make STATIC=1 ARCH=-march=x86-64-v2 colbert colbert-cpu
+      - name: no Homebrew libraries linked; built for Intel
         run: |
           otool -L colbert colbert-cpu
           ! otool -L colbert colbert-cpu | grep -i homebrew
-          test "$(lipo -archs colbert)" = "${{ matrix.arch }}"
+          test "$(lipo -archs colbert)" = "x86_64"
       - run: ./colbert version && ./colbert selftest
       - run: python3 tools/check_protocol.py ./colbert
       - uses: actions/upload-artifact@v4
-        with: { name: "engine-macos-${{ matrix.arch }}", path: "colbert\ncolbert-cpu" }
+        with: { name: engine-macos-x86_64, path: "colbert\ncolbert-cpu" }
 
   engine-windows:
     runs-on: windows-latest
@@ -152,11 +148,23 @@ jobs:
         with: { name: app-linux, path: Colbert-Linux-x64.tar.gz }
 
   app-macos:
-    needs: [engine-macos]
-    runs-on: macos-15
+    needs: [engine-macos-intel]
+    runs-on: macos-15                # Apple Silicon
     timeout-minutes: 40
+    env: { MACOSX_DEPLOYMENT_TARGET: "12.0" }
     steps:
       - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }     # git describe needs history and tags
+      - name: Apple Silicon engine
+        run: |
+          brew install gmp libomp
+          make STATIC=1 ARCH=-mcpu=apple-m1 colbert colbert-cpu
+          otool -L colbert colbert-cpu
+          ! otool -L colbert colbert-cpu | grep -i homebrew
+          test "$(lipo -archs colbert)" = "arm64"
+          ./colbert version && ./colbert selftest
+          python3 tools/check_protocol.py ./colbert
+          mkdir -p eng/arm64 && cp colbert colbert-cpu eng/arm64/
       - name: universal Python from python.org (the app runs on Apple Silicon and Intel Macs)
         run: |
           curl -sSfLo py.pkg https://www.python.org/ftp/python/3.12.10/python-3.12.10-macos11.pkg
@@ -165,8 +173,6 @@ jobs:
           lipo -archs "$PY"
           "$PY" -m pip install "pyinstaller>=6.11,<7"
           echo "PY=$PY" >> "$GITHUB_ENV"
-      - uses: actions/download-artifact@v4
-        with: { name: engine-macos-arm64, path: eng/arm64 }
       - uses: actions/download-artifact@v4
         with: { name: engine-macos-x86_64, path: eng/x86_64 }
       - name: universal engine
