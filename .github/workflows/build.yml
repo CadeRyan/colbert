@@ -94,11 +94,9 @@ jobs:
         run: |
           mkdir -p arm/opt
           for f in gmp libomp; do
-            tag=$(brew info --json=v2 $f | python3 -c "import json,sys; f=json.load(sys.stdin)['formulae'][0]['bottle']['stable']['files']; print(sorted(t for t in f if t.startswith('arm64_'))[-1])")
-            brew fetch --quiet --force --bottle-tag=$tag $f
-            tar -xzf "$(brew --cache --bottle-tag=$tag $f)" -C arm
+            python3 tools/fetch-arm64-bottle.py $f $f.tar.gz
+            tar -xzf $f.tar.gz -C arm
             ln -s "$PWD/arm/$f/$(ls arm/$f)" arm/opt/$f
-            echo "$f: $tag $(ls arm/$f)"
           done
           mkdir -p armbuild && cp -R Makefile src armbuild/
           make -C armbuild STATIC=1 BREW="$PWD/arm" ARCH="-arch arm64 -mcpu=apple-m1" VERSION="$(git describe --always --tags)" colbert colbert-cpu
