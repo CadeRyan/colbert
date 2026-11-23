@@ -1,0 +1,459 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>colbert · five numbers left in the Sierpiński problem</title>
+<meta name="description" content="Five numbers stand between us and a proof that 78,557 is the smallest Sierpiński number. colbert is a new exact way to test them on graphics cards. Download the app and join the search.">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#f7f6f2" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0f100f" media="(prefers-color-scheme: dark)">
+<meta property="og:type" content="website">
+<meta property="og:title" content="colbert · five numbers left">
+<meta property="og:description" content="A question open since 1962 comes down to five numbers. Help test them with a new exact GPU method.">
+<meta property="og:image" content="https://colbert.cade.ie/img/og.png">
+<meta property="og:url" content="https://colbert.cade.ie/">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" type="image/png" sizes="32x32" href="img/favicon-32.png">
+<link rel="apple-touch-icon" href="img/apple-touch-icon.png">
+<link rel="stylesheet" href="style.css">
+<script src="site.js" defer></script>
+</head>
+<body>
+
+<header class="top">
+  <nav class="wrap nav" aria-label="Sections">
+    <a class="brand" href="#top"><img src="img/icon-64.png" alt="" width="28" height="28"><span>colbert</span></a>
+    <div class="nav-links">
+      <a href="#problem">Problem</a>
+      <a href="#idea">The idea</a>
+      <a href="#speed">Speed</a>
+      <a href="#progress">Progress</a>
+      <a href="https://github.com/CadeRyan/colbert">GitHub</a>
+    </div>
+    <a class="btn btn-small" href="#join">Join</a>
+  </nav>
+</header>
+
+<main id="top">
+
+<!-- ======================================================================= hero -->
+<section class="hero">
+  <div class="wrap">
+    <p class="eyebrow">The Sierpiński problem · open since 1962</p>
+    <h1>Five numbers left.</h1>
+    <p class="lede">Prove that 78,557 is the smallest Sierpiński number and a sixty-year-old question is closed.
+      Only five candidates stand in the way. Each needs one prime of the form <span class="mono nowrap">k·2<sup>n</sup>+1</span>.</p>
+
+    <ol class="five" aria-label="The five remaining values of k">
+      <li>21181</li><li>22699</li><li>24737</li><li>55459</li><li>67607</li>
+    </ol>
+    <p class="five-caption mono">k · 2<sup>n</sup> + 1 &nbsp;→&nbsp; one prime each, and the problem is solved</p>
+
+    <p class="lede lede-2">The next numbers to test have <strong>14.4 million digits</strong>. colbert is a new, exact way to
+      test them on ordinary graphics cards, and the app that runs it takes a few minutes to set up.</p>
+
+    <div class="cta">
+      <a class="btn btn-primary" id="hero-download" href="#join">Download colbert</a>
+      <a class="btn btn-ghost" href="#idea">How it works</a>
+    </div>
+    <p class="cta-note" id="hero-note">For Mac, Windows and Linux. Free, and the source is on GitHub.</p>
+
+    <dl class="live-strip" aria-live="polite">
+      <div><dt>Candidates</dt><dd data-live="candidates">194,260</dd></div>
+      <div><dt>Running now</dt><dd data-live="active_assignments">–</dd></div>
+      <div><dt>Settled</dt><dd data-live="settled">–</dd></div>
+      <div class="live-src"><span class="dot" aria-hidden="true"></span><span id="live-state">Live from the project ledger</span></div>
+    </dl>
+  </div>
+</section>
+
+<!-- ======================================================================= problem -->
+<section id="problem" class="section">
+  <div class="wrap">
+    <p class="eyebrow">The problem</p>
+    <h2>A question from 1962</h2>
+    <div class="prose">
+      <p>Pick an odd number <var>k</var> and walk down the list <span class="mono nowrap">k·2+1, k·4+1, k·8+1, …</span>
+        For almost every <var>k</var> a prime turns up quickly. In 1960 Wacław Sierpiński proved that for some
+        <var>k</var> it never does: every number in the list is composite, forever. Those <var>k</var> are
+        <em>Sierpiński numbers</em>, and in 1962 John Selfridge found one: <strong>78,557</strong>.</p>
+    </div>
+
+    <figure class="figure" id="covering">
+      <figcaption>
+        <h3>Why 78,557 never gives a prime</h3>
+        <p>Every term <span class="mono nowrap">78557·2<sup>n</sup>+1</span> is divisible by one of seven small primes.
+          The pattern repeats every 36 steps, so it covers every <var>n</var>. Each cell shows <var>n</var> and a prime that divides that term.</p>
+      </figcaption>
+      <div class="strip" role="list" aria-label="n from 1 to 36 with a prime factor of 78557·2^n+1">
+        <!-- n = 1..36: 78557·2^n+1 is divisible by this prime (checked: tools in the repo's history, and site.js recomputes it) -->
+        <span class="cell" role="listitem" data-n="1" data-p="5"><i>1</i><b>5</b></span>
+        <span class="cell" role="listitem" data-n="2" data-p="3"><i>2</i><b>3</b></span>
+        <span class="cell" role="listitem" data-n="3" data-p="73"><i>3</i><b>73</b></span>
+        <span class="cell" role="listitem" data-n="4" data-p="3"><i>4</i><b>3</b></span>
+        <span class="cell" role="listitem" data-n="5" data-p="5"><i>5</i><b>5</b></span>
+        <span class="cell" role="listitem" data-n="6" data-p="3"><i>6</i><b>3</b></span>
+        <span class="cell" role="listitem" data-n="7" data-p="7"><i>7</i><b>7</b></span>
+        <span class="cell" role="listitem" data-n="8" data-p="3"><i>8</i><b>3</b></span>
+        <span class="cell" role="listitem" data-n="9" data-p="5"><i>9</i><b>5</b></span>
+        <span class="cell" role="listitem" data-n="10" data-p="3"><i>10</i><b>3</b></span>
+        <span class="cell" role="listitem" data-n="11" data-p="13"><i>11</i><b>13</b></span>
+        <span class="cell" role="listitem" data-n="12" data-p="3"><i>12</i><b>3</b></span>
+        <span class="cell" role="listitem" data-n="13" data-p="5"><i>13</i><b>5</b></span>
+        <span class="cell" role="listitem" data-n="14" data-p="3"><i>14</i><b>3</b></span>
+        <span class="cell" role="listitem" data-n="15" data-p="19"><i>15</i><b>19</b></span>
+        <span class="cell" role="listitem" data-n="16" data-p="3"><i>16</i><b>3</b></span>
+        <span class="cell" role="listitem" data-n="17" data-p="5"><i>17</i><b>5</b></span>
+        <span class="cell" role="listitem" data-n="18" data-p="3"><i>18</i><b>3</b></span>
+        <span class="cell" role="listitem" data-n="19" data-p="7"><i>19</i><b>7</b></span>
+        <span class="cell" role="listitem" data-n="20" data-p="3"><i>20</i><b>3</b></span>
+        <span class="cell" role="listitem" data-n="21" data-p="5"><i>21</i><b>5</b></span>
+        <span class="cell" role="listitem" data-n="22" data-p="3"><i>22</i><b>3</b></span>
+        <span class="cell" role="listitem" data-n="23" data-p="13"><i>23</i><b>13</b></span>
+        <span class="cell" role="listitem" data-n="24" data-p="3"><i>24</i><b>3</b></span>
+        <span class="cell" role="listitem" data-n="25" data-p="5"><i>25</i><b>5</b></span>
+        <span class="cell" role="listitem" data-n="26" data-p="3"><i>26</i><b>3</b></span>
+        <span class="cell" role="listitem" data-n="27" data-p="37"><i>27</i><b>37</b></span>
+        <span class="cell" role="listitem" data-n="28" data-p="3"><i>28</i><b>3</b></span>
+        <span class="cell" role="listitem" data-n="29" data-p="5"><i>29</i><b>5</b></span>
+        <span class="cell" role="listitem" data-n="30" data-p="3"><i>30</i><b>3</b></span>
+        <span class="cell" role="listitem" data-n="31" data-p="7"><i>31</i><b>7</b></span>
+        <span class="cell" role="listitem" data-n="32" data-p="3"><i>32</i><b>3</b></span>
+        <span class="cell" role="listitem" data-n="33" data-p="5"><i>33</i><b>5</b></span>
+        <span class="cell" role="listitem" data-n="34" data-p="3"><i>34</i><b>3</b></span>
+        <span class="cell" role="listitem" data-n="35" data-p="13"><i>35</i><b>13</b></span>
+        <span class="cell" role="listitem" data-n="36" data-p="3"><i>36</i><b>3</b></span>
+      </div>
+      <div class="keys" aria-label="Highlight the terms a prime divides">
+        <button class="key" data-p="3" type="button"><b>3</b> every 2nd term</button>
+        <button class="key" data-p="5" type="button"><b>5</b> every 4th</button>
+        <button class="key" data-p="7" type="button"><b>7</b> every 3rd</button>
+        <button class="key" data-p="13" type="button"><b>13</b> every 12th</button>
+        <button class="key" data-p="19" type="button"><b>19</b> every 18th</button>
+        <button class="key" data-p="37" type="button"><b>37</b> every 36th</button>
+        <button class="key" data-p="73" type="button"><b>73</b> every 9th</button>
+      </div>
+      <p class="tip-host" id="covering-tip" aria-live="polite">Hover or tap a cell to see the number it stands for.</p>
+    </figure>
+
+    <div class="prose">
+      <p>Is 78,557 the <em>smallest</em>? To prove it, every odd <var>k</var> below it needs a prime somewhere in its list.
+        Most fell quickly. By 2002, seventeen were left, and the volunteer project <strong>Seventeen or Bust</strong>
+        set out to find them. <strong>PrimeGrid</strong> later took up the search. Twelve have fallen. A prime of more than a
+        million digits that settles one is a <em>Colbert number</em>, a whimsical nod to Stephen Colbert, and this project's namesake.</p>
+    </div>
+
+    <figure class="figure">
+      <figcaption>
+        <h3>The seventeen</h3>
+        <p>Where the search stood in 2002, and the prime that eliminated each <var>k</var> since.</p>
+      </figcaption>
+      <ul class="seventeen">
+        <li><b>4847</b><span>n = 3,321,063</span><small>2005 · 999,744 digits</small></li>
+        <li><b>5359</b><span>n = 5,054,502</span><small>2003 · 1,521,561 digits</small></li>
+        <li><b>10223</b><span>n = 31,172,165</span><small>2016 · 9,383,761 digits</small></li>
+        <li><b>19249</b><span>n = 13,018,586</span><small>2007 · 3,918,990 digits</small></li>
+        <li class="open"><b>21181</b><span>no prime yet</span><small>searching</small></li>
+        <li class="open"><b>22699</b><span>no prime yet</span><small>searching</small></li>
+        <li class="open"><b>24737</b><span>no prime yet</span><small>searching</small></li>
+        <li><b>27653</b><span>n = 9,167,433</span><small>2005 · 2,759,677 digits</small></li>
+        <li><b>28433</b><span>n = 7,830,457</span><small>2004 · 2,357,207 digits</small></li>
+        <li><b>33661</b><span>n = 7,031,232</span><small>2007 · 2,116,617 digits</small></li>
+        <li><b>44131</b><span>n = 995,972</span><small>2002 · 299,823 digits</small></li>
+        <li><b>46157</b><span>n = 698,207</span><small>2002 · 210,186 digits</small></li>
+        <li><b>54767</b><span>n = 1,337,287</span><small>2002 · 402,569 digits</small></li>
+        <li class="open"><b>55459</b><span>no prime yet</span><small>searching</small></li>
+        <li><b>65567</b><span>n = 1,013,803</span><small>2002 · 305,190 digits</small></li>
+        <li class="open"><b>67607</b><span>no prime yet</span><small>searching</small></li>
+        <li><b>69109</b><span>n = 1,157,446</span><small>2002 · 348,431 digits</small></li>
+      </ul>
+      <p class="fig-note">The last to fall was <span class="mono nowrap">10223·2<sup>31,172,165</sup>+1</span>, found by PrimeGrid in 2016.
+        Nothing has fallen in the ten years since.</p>
+    </figure>
+    <!-- The explainer video goes here when it's ready. -->
+  </div>
+</section>
+
+<!-- ======================================================================= why hard -->
+<section class="section band">
+  <div class="wrap">
+    <p class="eyebrow">Why it's hard</p>
+    <h2>Fourteen million digits, one squaring at a time</h2>
+    <dl class="stats">
+      <div><dt>Digits in the next candidates</dt><dd>14.4M</dd><p>about 3,000 printed pages each</p></div>
+      <div><dt>Squarings per test</dt><dd>47.9M</dd><p>each one depending on the last</p></div>
+      <div><dt>One test on a laptop GPU</dt><dd>~40 h</dd><p>Apple M4 Pro, measured</p></div>
+    </dl>
+    <div class="prose two-col">
+      <div>
+      <p>For numbers of this shape there is a one-calculation test, due to François Proth in 1878: with
+        <math><mi>P</mi><mo>=</mo><mi>k</mi><mo>·</mo><msup><mn>2</mn><mi>n</mi></msup><mo>+</mo><mn>1</mn></math>
+        and a suitable small <var>a</var>,</p>
+      <div class="formula"><math display="block"><mi>P</mi><mspace width="0.35em"/><mtext>is prime</mtext><mspace width="0.6em"/><mo>⟺</mo><mspace width="0.6em"/><msup><mi>a</mi><mrow><mo>(</mo><mi>P</mi><mo>−</mo><mn>1</mn><mo>)</mo><mo>/</mo><mn>2</mn></mrow></msup><mo>≡</mo><mo>−</mo><mn>1</mn><mspace width="0.4em"/><mo>(</mo><mi>mod</mi><mspace width="0.3em"/><mi>P</mi><mo>)</mo></math></div>
+      <p>In practice: square a 14-million-digit number, reduce it modulo <var>P</var>, and repeat almost 48 million times.
+        Each squaring needs the one before, so a test can't be split across computers.
+        The only way to finish sooner is to make each squaring faster.</p>
+      </div>
+      <div>
+      <p>Primes this large are rare. Across the five, there's about a <strong>one-in-five chance</strong> of a prime before
+        <var>n</var> reaches 57.5 million, and on average one turns up every <strong>half a million tests</strong>.
+        Nobody knows which test it will be. It could be the one on your computer.</p>
+          </div>
+    </div>
+  </div>
+</section>
+
+<!-- ======================================================================= the idea -->
+<section id="idea" class="section">
+  <div class="wrap">
+    <p class="eyebrow">The idea</p>
+    <h2>An exact transform with no padding</h2>
+
+    <div class="steps">
+      <article class="step">
+        <h3><span class="num">1</span>Multiplying with transforms</h3>
+        <p>Huge numbers are multiplied with a fast Fourier transform (FFT): digits become "frequencies", the
+          product becomes a pointwise multiplication, and the transform runs in a circle, so anything that overflows
+          the top wraps round to the bottom. For Mersenne numbers <span class="mono nowrap">2<sup>p</sup>−1</span> that
+          wrap-around is exactly "modulo <var>P</var>" (Crandall and Fagin, 1994). That's why Mersenne testing is so fast.</p>
+      </article>
+      <article class="step">
+        <h3><span class="num">2</span>The trouble with <var>k</var></h3>
+        <p>For <span class="mono nowrap">k·2<sup>n</sup>+1</span>, overflow should wrap round <em>divided by k</em>. Programs
+          either <strong>double the transform</strong> so nothing wraps (exact, but twice the data: proth20, the existing GPU
+          tester for these numbers), or <strong>fold k into floating-point weights</strong> (Percival, 2002; Woltman's gwnum,
+          behind PrimeGrid's CPU tests). Those weights need double precision, which gaming GPUs run 32–64× slower
+          than their whole-number arithmetic.</p>
+      </article>
+      <article class="step step-key">
+        <h3><span class="num">3</span>colbert's step</h3>
+        <p>Do Percival's weighted transform <strong>exactly</strong>, in clock arithmetic: pairs of numbers modulo the
+          Mersenne prime <math><mi>q</mi><mo>=</mo><msup><mn>2</mn><mn>61</mn></msup><mo>−</mo><mn>1</mn></math>, multiplied like complex numbers (the field
+          <math><mi>GF</mi><mo>(</mo><msup><mi>q</mi><mn>2</mn></msup><mo>)</mo></math>). The weights need a root θ of a number that depends on <var>k</var> and <var>n</var>:</p>
+        <div class="formula"><math display="block"><msup><mi>θ</mi><mi>N</mi></msup><mo>=</mo><mo>−</mo><mi>k</mi><mo>·</mo><msup><mn>2</mn><mi>n</mi></msup><mspace width="0.6em"/><mtext>in GF(</mtext><msup><mi>q</mi><mn>2</mn></msup><mtext>)</mtext></math></div>
+        <p>In most number systems that root doesn't exist for most <var>k</var>, which is why exact GPU testers were limited
+          to special forms. In this one it <strong>always</strong> exists.</p>
+      </article>
+    </div>
+
+    <div class="proof">
+      <div class="proof-text">
+        <h3>Why the root always exists</h3>
+        <p>Every nonzero number modulo <var>q</var> is a sum of two squares, <math><msup><mi>a</mi><mn>2</mn></msup><mo>+</mo><msup><mi>b</mi><mn>2</mn></msup></math>, which in
+          <math><mi>GF</mi><mo>(</mo><msup><mi>q</mi><mn>2</mn></msup><mo>)</mo></math> is a pair <var>h</var> times its mirror image <math><mover><mi>h</mi><mo>‾</mo></mover></math>.
+          Raising a pair to the power <var>q</var> mirrors it, so <math><msup><mi>h</mi><mrow><mi>q</mi><mo>+</mo><mn>1</mn></mrow></msup><mo>=</mo><mi>h</mi><mo>·</mo><mover><mi>h</mi><mo>‾</mo></mover></math>. And because
+          <var>q</var> is a Mersenne prime, <math><mi>q</mi><mo>+</mo><mn>1</mn><mo>=</mo><msup><mn>2</mn><mn>61</mn></msup></math> is a power of two, so it splits
+          into <var>N</var> equal steps for any power-of-two transform length <var>N</var>:</p>
+        <div class="formula formula-set"><math displaystyle="true"><mi>h</mi><mo>·</mo><mover><mi>h</mi><mo>‾</mo></mover><mo>=</mo><msup><mi>a</mi><mn>2</mn></msup><mo>+</mo><msup><mi>b</mi><mn>2</mn></msup><mo>=</mo><mo>−</mo><mi>k</mi><mo>·</mo><msup><mn>2</mn><mi>n</mi></msup></math><math displaystyle="true"><mi>θ</mi><mo>=</mo><msup><mi>h</mi><mrow><mo>(</mo><mi>q</mi><mo>+</mo><mn>1</mn><mo>)</mo><mo>/</mo><mi>N</mi></mrow></msup></math><math displaystyle="true"><msup><mi>θ</mi><mi>N</mi></msup><mo>=</mo><msup><mi>h</mi><mrow><mi>q</mi><mo>+</mo><mn>1</mn></mrow></msup><mo>=</mo><mi>h</mi><mo>·</mo><mover><mi>h</mi><mo>‾</mo></mover></math></div>
+        <p>θ is a pair of whole numbers, computed in a fraction of a second before each test, whatever <var>k</var> and <var>n</var> are.
+          With the weights <math><msup><mn>2</mn><msub><mi>s</mi><mi>j</mi></msub></msup><mo>·</mo><msup><mi>θ</mi><mrow><mo>−</mo><mi>j</mi></mrow></msup></math>, multiplying modulo
+          <var>P</var> becomes one cyclic convolution of length <var>N</var>: <strong>no padding</strong>, and no rounding anywhere.</p>
+      </div>
+      <aside class="credit">
+        <h3>What's new, and what isn't</h3>
+        <p>The ingredients are decades old: the weighted transform (Crandall and Fagin, 1994), this field and its transforms
+          (Crandall, 1999), Percival's method for <var>k</var> (2002), and Woltman's and Gallot's work on practical testers.
+          The new part is noticing that in <math><mi>GF</mi><mo>(</mo><msup><mi>q</mi><mn>2</mn></msup><mo>)</mo></math> over a Mersenne prime the roots always exist, so the pieces fit.</p>
+        <blockquote>
+          <p>“Surprisingly no fast algorithm exists for k·b<sup>n</sup> +/- 1”</p>
+          <footer>Yves Gallot, author of proth20 and genefer, on using GPU-friendly transforms for these numbers
+            (<a href="https://www.primegrid.com/forum_thread.php?id=10486">PrimeGrid forum</a>, 2024)</footer>
+        </blockquote>
+        <p>As far as we can find, colbert is the first. The <a href="https://github.com/CadeRyan/colbert/blob/main/docs/NOVELTY.md">prior-art review</a>
+          sets out the evidence and its limits, and the <a href="https://github.com/CadeRyan/colbert/blob/main/docs/DESIGN.md">design notes</a> have the proofs.</p>
+      </aside>
+    </div>
+
+    <div class="pillars">
+      <article>
+        <h3>Exact by proof</h3>
+        <p>Two fields, <span class="mono">2<sup>61</sup>−1</span> and <span class="mono">2<sup>31</sup>−1</span>, combine to
+          92 bits of exact arithmetic. Before every run a bound (Cauchy–Schwarz over the actual word sizes) proves no
+          value can overflow. There's no round-off to monitor.</p>
+      </article>
+      <article>
+        <h3>Checked as it runs</h3>
+        <p>A Gerbicz–Li check verifies the chain of squarings as it goes. A flipped bit from heat or a cosmic ray is
+          caught, and the test rewinds to the last verified point. The test suite flips bits on purpose to prove it works.</p>
+      </article>
+      <article>
+        <h3>Built for GPUs</h3>
+        <p>In this field an eighth root of unity is <math><mo>(</mo><mn>1</mn><mo>+</mo><mi>i</mi><mo>)</mo><mo>·</mo><msup><mn>2</mn><mn>30</mn></msup></math>, so multiplying
+          by it is an addition and a bit rotation. colbert's four-step transform does a squaring in three passes over each
+          field's data. It's written in OpenCL, which NVIDIA, AMD, Intel and Apple graphics all support.</p>
+      </article>
+    </div>
+  </div>
+</section>
+
+<!-- ======================================================================= speed -->
+<section id="speed" class="section band">
+  <div class="wrap">
+    <p class="eyebrow">Speed</p>
+    <h2>Less data per squaring, so faster tests</h2>
+    <div class="speed-grid">
+      <figure class="figure chart" id="data-chart">
+        <figcaption>
+          <h3>Data per squaring</h3>
+          <p>Transform data for one squaring at the leading edge (<var>n</var> ≈ 47.9 million). On a GPU a squaring's time
+            is mostly memory traffic, so this decides the speed.</p>
+        </figcaption>
+        <div class="bars" role="list">
+          <div class="bar-row" role="listitem" tabindex="0" data-tip="proth20: exact, but the transform is doubled (zero padding) so nothing wraps. 64.0 MiB per squaring.">
+            <span class="bar-label">proth20<small>exact, zero-padded</small></span>
+            <span class="bar-track"><span class="bar" style="--w:100%"></span></span>
+            <span class="bar-value">64.0 MiB</span>
+          </div>
+          <div class="bar-row" role="listitem" tabindex="0" data-tip="Floating-point weighted transform (gwnum, llrCUDA): about 10.8 bits per double for these k. About 33.8 MiB per squaring.">
+            <span class="bar-label">FP64 weighted<small>gwnum, llrCUDA</small></span>
+            <span class="bar-track"><span class="bar" style="--w:52.8%"></span></span>
+            <span class="bar-value">33.8 MiB</span>
+          </div>
+          <div class="bar-row is-us" role="listitem" tabindex="0" data-tip="colbert: exact, no padding, GF(M61²)×GF(M31²). 24.0 MiB per squaring, 2.7× less than proth20.">
+            <span class="bar-label">colbert<small>exact, no padding</small></span>
+            <span class="bar-track"><span class="bar" style="--w:37.5%"></span></span>
+            <span class="bar-value">24.0 MiB</span>
+          </div>
+        </div>
+        <p class="tip-host" id="chart-tip" aria-live="polite"></p>
+        <details class="table-view">
+          <summary>Show as a table</summary>
+          <table>
+            <thead><tr><th>Method</th><th>Data per squaring</th></tr></thead>
+            <tbody>
+              <tr><td>proth20 (exact, zero-padded, two 31-bit primes)</td><td>64.0 MiB</td></tr>
+              <tr><td>FP64 weighted transform (gwnum, llrCUDA)</td><td>~33.8 MiB</td></tr>
+              <tr><td>colbert (exact, no padding)</td><td>24.0 MiB</td></tr>
+            </tbody>
+          </table>
+        </details>
+      </figure>
+
+      <div class="speed-side">
+        <div class="card measured">
+          <p class="tag tag-measured">Measured</p>
+          <h3>Apple M4 Pro laptop GPU</h3>
+          <p class="big mono">3.03 ms <small>per squaring</small></p>
+          <p>One leading-edge test in about <strong>40 hours</strong>, down from 72 with colbert's first GPU kernels.
+            The same laptop's 14 CPU cores take about 11.5 days.</p>
+        </div>
+        <div class="card">
+          <p class="tag">Modelled</p>
+          <h3>A desktop NVIDIA card</h3>
+          <p>For an RTX 4090 the performance model gives tuned colbert <strong>7–9 tests a day</strong>, against about 3.6 for
+            proth20, and two to three times the tests per kilowatt-hour of today's CPU testing.
+            <a href="https://github.com/CadeRyan/colbert/blob/main/docs/PERFORMANCE.md">The model and its caveats.</a></p>
+          <p class="note">Nobody has run colbert on NVIDIA or AMD hardware yet. If you have one, your first test produces the
+            first real numbers.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="less-work">
+      <h3>And less work to do</h3>
+      <div class="lw-grid">
+        <p><strong class="mono">13,713</strong> candidates removed by a deeper sieve, with every prime up to 2<sup>32</sup>.
+          Each one's factor is published, so anyone can check it.</p>
+        <p><strong class="mono">1 in 4</strong> remaining candidates has a factor that P−1 factoring finds for 3.7% of the cost
+          of a test. The app tries it first, cutting the project's work by about <strong>22%</strong>.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ======================================================================= join -->
+<section id="join" class="section">
+  <div class="wrap">
+    <p class="eyebrow">Join</p>
+    <h2>Lend your computer to the search</h2>
+    <ol class="how">
+      <li><b>Download and open.</b> The engine is included; there's nothing else to install.</li>
+      <li><b>Give a name.</b> It shows on the progress board. That, your computer's name and model, and your results are all the project sees.</li>
+      <li><b>Let it run.</b> It checks your graphics card and CPU against exact arithmetic, then tests numbers. Pause any time; progress is saved.</li>
+    </ol>
+
+    <div class="downloads" id="downloads">
+      <a class="dl" data-os="mac" href="https://github.com/CadeRyan/colbert/releases/latest/download/Colbert-macOS.dmg">
+        <span class="dl-os">Mac</span>
+        <span class="dl-detail">Apple Silicon or Intel · macOS 12 or newer</span>
+        <span class="dl-file mono">Colbert-macOS.dmg<span data-size="Colbert-macOS.dmg"></span></span>
+        <span class="dl-first">Drag Colbert to Applications and open it. The first time, macOS asks you to allow it: System Settings → Privacy &amp; Security → <em>Open Anyway</em>.</span>
+      </a>
+      <a class="dl" data-os="windows" href="https://github.com/CadeRyan/colbert/releases/latest/download/Colbert-Windows-Setup.exe">
+        <span class="dl-os">Windows</span>
+        <span class="dl-detail">Windows 10 or 11 · 64-bit</span>
+        <span class="dl-file mono">Colbert-Windows-Setup.exe<span data-size="Colbert-Windows-Setup.exe"></span></span>
+        <span class="dl-first">Installs for you only, no administrator rights. If SmartScreen appears: <em>More info</em> → <em>Run anyway</em>.</span>
+      </a>
+      <a class="dl" data-os="linux" href="https://github.com/CadeRyan/colbert/releases/latest/download/Colbert-Linux-x64.tar.gz">
+        <span class="dl-os">Linux</span>
+        <span class="dl-detail">x86-64 · any recent distribution</span>
+        <span class="dl-file mono">Colbert-Linux-x64.tar.gz<span data-size="Colbert-Linux-x64.tar.gz"></span></span>
+        <span class="dl-first">Unpack and run <code>./Colbert</code>. Graphics cards need their OpenCL driver; servers can run it headless.</span>
+      </a>
+    </div>
+    <p class="release-line" id="release-line">The app opens in your web browser. It isn't code-signed yet, hence the one-time step above.
+      <a href="https://github.com/CadeRyan/colbert/releases/latest">All releases</a> ·
+      <a href="https://github.com/CadeRyan/colbert/blob/main/docs/APP.md">How the app works</a> ·
+      <a href="https://github.com/CadeRyan/colbert">Build from source</a></p>
+
+    <div class="guarantees">
+      <p><strong>Results are checked.</strong> Each device self-tests against GMP before it gets work. Results from new
+        computers, and a random share of the rest, are re-tested on other computers, and a prime is confirmed
+        independently before anyone announces it.</p>
+      <p><strong>Any computer helps.</strong> A graphics card makes it fast. Without one, colbert uses the CPU; that's slower,
+        but every finished test settles a number for good.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ======================================================================= progress -->
+<section id="progress" class="section band">
+  <div class="wrap">
+    <p class="eyebrow">Progress</p>
+    <h2>The search, live</h2>
+    <p class="sub" id="progress-sub">Candidates <span class="mono nowrap" data-live="range">n = 47,900,038 to 57,499,858</span>, five values of <var>k</var>, sieved to 2<sup>32</sup>.</p>
+    <dl class="progress-grid">
+      <div><dt>Candidates</dt><dd data-live="candidates">194,260</dd></div>
+      <div><dt>Settled</dt><dd data-live="settled">–</dd></div>
+      <div><dt>Running now</dt><dd data-live="active_assignments">–</dd></div>
+      <div><dt>Results, last 24 h</dt><dd data-live="tests_last_24h">–</dd></div>
+      <div><dt>Factors found by P−1</dt><dd data-live="factors">–</dd></div>
+      <div><dt>All tested below n</dt><dd data-live="tested_through_n">–</dd></div>
+    </dl>
+    <div class="progress-bar" aria-hidden="true"><div id="progress-fill"></div></div>
+    <div class="boards">
+      <div class="board">
+        <h3>Most results</h3>
+        <ol id="top-owners" class="owners"><li class="empty">No results yet. The first test is running now.</li></ol>
+      </div>
+      <div class="board">
+        <h3>Primes reported</h3>
+        <ul id="primes" class="primes"><li class="empty">None yet.</li></ul>
+        <p class="note">A reported prime is double-checked on another computer before it counts.</p>
+      </div>
+    </div>
+    <p class="fine" id="live-footnote">Numbers come straight from the <a href="https://colbert-ledger-214187368360.us-central1.run.app/">project ledger</a>.</p>
+  </div>
+</section>
+
+</main>
+
+<footer class="foot">
+  <div class="wrap foot-grid">
+    <div>
+      <a class="brand" href="#top"><img src="img/icon-64.png" alt="" width="24" height="24"><span>colbert</span></a>
+      <p>A project by <a href="https://cade.ie">Cade Ryan</a>. The code, the mathematics and every measurement are on
+        <a href="https://github.com/CadeRyan/colbert">GitHub</a>.</p>
+    </div>
+    <div>
+      <p>Built on the work of François Proth, Wacław Sierpiński, John Selfridge, Richard Crandall, Barry Fagin, Colin Percival,
+        George Woltman, Yves Gallot, Robert Gerbicz and Darren Li, and on twenty years of searching by
+        <a href="https://www.primegrid.com">PrimeGrid</a> and Seventeen or Bust.</p>
+      <p class="fine">This site sets no cookies and has no trackers. It reads live numbers from the project ledger and release details from GitHub.</p>
+    </div>
+  </div>
+</footer>
+</body>
+</html>
