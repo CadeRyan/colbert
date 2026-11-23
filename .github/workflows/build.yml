@@ -1,16 +1,28 @@
-# Build and check the engine on Linux, macOS and Windows; test the ledger; bundle the app with
-# the engine for each system. On a published GitHub release the bundles are attached to it.
+# Build and check the engine on Linux, macOS (Apple Silicon and Intel) and Windows, test the
+# ledger, and package the downloadable app for each system. Every package is smoke-tested:
+# the packaged app proves a small known prime with its own engine.
 #
-# NOT YET RUN: written and syntax-checked locally, but GitHub Actions has not executed it.
+# A tag vX.Y.Z (matching app/colbert_app/__init__.py VERSION) also creates a draft GitHub
+# release with the downloads attached under names that never change, so these links always
+# point at the newest published release:
+#   https://github.com/CadeRyan/colbert/releases/latest/download/Colbert-macOS.dmg
+#   https://github.com/CadeRyan/colbert/releases/latest/download/Colbert-Windows-Setup.exe
+#   https://github.com/CadeRyan/colbert/releases/latest/download/Colbert-Linux-x64.tar.gz
 name: build
 
 on:
   push:
-    branches: [main]
+    branches: ["**"]
+    tags: ["v*"]
   pull_request:
   workflow_dispatch:
-  release:
-    types: [published]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   ledger:
@@ -22,35 +34,66 @@ jobs:
       - name: ledger tests (SQLite)
         run: python -m unittest discover -s ledger/tests -t . -v
 
+  # ------------------------------------------------------------------ engines
+
   engine-linux:
     runs-on: ubuntu-22.04            # older glibc: the binary runs on more distributions
     steps:
       - uses: actions/checkout@v4
         with: { fetch-depth: 0 }     # git describe needs history and tags
-      - run: sudo apt-get update && sudo apt-get install -y build-essential libgmp-dev ocl-icd-opencl-dev opencl-headers pocl-opencl-icd
-      - run: make ARCH=-march=x86-64-v2 colbert colbert-cpu
-      - run: ./colbert version && ./colbert devices
-      - run: ./colbert selftest
-      - run: ./colbert selftest --backend ocl              # PoCL: the GPU code path on the CPU
-      - run: python3 tools/check_protocol.py ./colbert
-      - run: python3 tools/check_protocol.py ./colbert --backend ocl
-      - run: python3 tools/check_protocol.py ./colbert-cpu
+      - run: sudo apt-get update && sudo apt-get install -y build-essential libgmp-dev ocl-icd-opencl-dev opencl-headers
+      - run: make STATIC=1 ARCH=-march=x86-64-v2 colbert colbert-cpu
+      - name: libgomp travels with the engine
+        run: mkdir -p out && cp colbert colbert-cpu "$(g++ -print-file-name=libgomp.so.1)" out/ && ls -la out
+      - name: only system libraries needed (GMP and the C++ runtime are linked in)
+        run: |
+          readelf -d out/colbert out/colbert-cpu | grep -E "NEEDED|RUNPATH"
+          ! readelf -d out/colbert out/colbert-cpu | grep -E "NEEDED.*(gmp|stdc\+\+|gcc_s)"
+          readelf -d out/colbert | grep RUNPATH | grep -q ORIGIN
+      - run: out/colbert version && out/colbert devices
+      - run: out/colbert selftest
+      - run: python3 tools/check_protocol.py out/colbert
+      - run: python3 tools/check_protocol.py out/colbert-cpu
       - uses: actions/upload-artifact@v4
-        with: { name: engine-linux-x64, path: "colbert\ncolbert-cpu" }
+        with: { name: engine-linux-x64, path: out/ }
+
+  opencl-pocl:
+    # The OpenCL kernels on a CPU (PoCL): a second OpenCL implementation besides real GPUs.
+    # Informational: PoCL can't compile for every CPU model GitHub's machines use.
+    runs-on: ubuntu-24.04
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - run: sudo apt-get update && sudo apt-get install -y build-essential libgmp-dev ocl-icd-opencl-dev opencl-headers pocl-opencl-icd
+      - run: make colbert
+      - run: ./colbert devices
+      - run: ./colbert selftest --backend ocl
+      - run: python3 tools/check_protocol.py ./colbert --backend ocl
 
   engine-macos:
-    runs-on: macos-14                # Apple Silicon
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: macos-15, arch: arm64, flags: -mcpu=apple-m1 }
+          - { os: macos-15-intel, arch: x86_64, flags: -march=x86-64-v2 }
+    runs-on: ${{ matrix.os }}
+    env: { MACOSX_DEPLOYMENT_TARGET: "12.0" }
     steps:
       - uses: actions/checkout@v4
         with: { fetch-depth: 0 }
       - run: brew install gmp libomp
-      - run: make ARCH=-mcpu=apple-m1 STATIC=1 colbert colbert-cpu
-      - name: no Homebrew libraries linked
-        run: "! otool -L colbert colbert-cpu | grep -i homebrew"
+      - run: make STATIC=1 ARCH=${{ matrix.flags }} colbert colbert-cpu
+      - name: no Homebrew libraries linked; built for ${{ matrix.arch }}
+        run: |
+          otool -L colbert colbert-cpu
+          ! otool -L colbert colbert-cpu | grep -i homebrew
+          test "$(lipo -archs colbert)" = "${{ matrix.arch }}"
       - run: ./colbert version && ./colbert selftest
       - run: python3 tools/check_protocol.py ./colbert
       - uses: actions/upload-artifact@v4
-        with: { name: engine-macos-arm64, path: "colbert\ncolbert-cpu" }
+        with: { name: "engine-macos-${{ matrix.arch }}", path: "colbert\ncolbert-cpu" }
 
   engine-windows:
     runs-on: windows-latest
@@ -63,8 +106,9 @@ jobs:
         with:
           msystem: UCRT64
           install: >-
-            make git mingw-w64-ucrt-x86_64-gcc mingw-w64-ucrt-x86_64-gmp
+            make git mingw-w64-ucrt-x86_64-gcc mingw-w64-ucrt-x86_64-libgomp mingw-w64-ucrt-x86_64-gmp
             mingw-w64-ucrt-x86_64-opencl-icd mingw-w64-ucrt-x86_64-opencl-headers
+      - run: git config --global --add safe.directory "$(pwd)"     # MSYS2's git and the checkout differ in owner
       - run: make ARCH=-march=x86-64-v2 colbert colbert-cpu
       - name: collect runtime DLLs next to the binaries
         run: |
@@ -82,46 +126,161 @@ jobs:
       - uses: actions/upload-artifact@v4
         with: { name: engine-windows-x64, path: out/ }
 
-  app:
-    needs: [ledger, engine-linux, engine-macos, engine-windows]
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - { os: ubuntu-22.04, engine: engine-linux-x64, bundle: colbert-linux-x64, windowed: "" }
-          - { os: macos-14, engine: engine-macos-arm64, bundle: colbert-macos-arm64, windowed: "--windowed" }
-          - { os: windows-latest, engine: engine-windows-x64, bundle: colbert-windows-x64, windowed: "--windowed" }
-    runs-on: ${{ matrix.os }}
+  # ------------------------------------------------------------------ the downloadable app
+
+  app-linux:
+    needs: [engine-linux]
+    runs-on: ubuntu-22.04
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with: { python-version: "3.12" }
       - uses: actions/download-artifact@v4
-        with: { name: "${{ matrix.engine }}", path: app/engine }
-      - name: restore execute permission (artifacts drop it)
-        if: runner.os != 'Windows'
-        run: chmod +x app/engine/*
+        with: { name: engine-linux-x64, path: app/engine }
+      - run: chmod +x app/engine/colbert app/engine/colbert-cpu
       - run: pip install "pyinstaller>=6.11,<7"
-      - name: bundle
-        shell: bash
-        run: |
-          pyinstaller --noconfirm --onedir --name Colbert ${{ matrix.windowed }} \
-            --add-data "app/colbert_app/ui:colbert_app/ui" --add-binary "app/engine/*:engine" app/run.py
-      - name: smoke test the bundle (engine found, protocol understood)
-        if: runner.os == 'Linux'
+      - run: pyinstaller --noconfirm app/colbert.spec
+      - name: smoke test (the packaged app proves a small prime with its own engine)
         run: |
           dist/Colbert/Colbert --version
-          python3 -c "import sys; sys.path.insert(0,'app'); from colbert_app.engine import Engine; e=Engine('app/engine/colbert').probe(); print(e.version, e.protocol, e.backends)"
-      - name: zip
-        shell: bash
-        run: |
-          cd dist
-          if [ "$RUNNER_OS" = "Windows" ]; then 7z a "../${{ matrix.bundle }}.zip" Colbert; \
-          elif [ "$RUNNER_OS" = "macOS" ]; then ditto -c -k --keepParent Colbert.app "../${{ matrix.bundle }}.zip"; \
-          else zip -qr "../${{ matrix.bundle }}.zip" Colbert; fi
+          echo "20015 413" > tiny.txt
+          COLBERT_DATA="$RUNNER_TEMP/d" dist/Colbert/Colbert --headless --local tiny.txt
+          grep '"result":"PRIME"' "$RUNNER_TEMP/d/engine-results.jsonl"
+      - run: tools/package-linux.sh dist/Colbert Colbert-Linux-x64.tar.gz
       - uses: actions/upload-artifact@v4
-        with: { name: "${{ matrix.bundle }}", path: "${{ matrix.bundle }}.zip" }
-      - name: attach to the release
-        if: github.event_name == 'release'
-        uses: softprops/action-gh-release@v2
-        with: { files: "${{ matrix.bundle }}.zip" }
+        with: { name: app-linux, path: Colbert-Linux-x64.tar.gz }
+
+  app-macos:
+    needs: [engine-macos]
+    runs-on: macos-15
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - name: universal Python from python.org (the app runs on Apple Silicon and Intel Macs)
+        run: |
+          curl -sSfLo py.pkg https://www.python.org/ftp/python/3.12.10/python-3.12.10-macos11.pkg
+          sudo installer -pkg py.pkg -target /
+          PY=/Library/Frameworks/Python.framework/Versions/3.12/bin/python3.12
+          lipo -archs "$PY"
+          "$PY" -m pip install "pyinstaller>=6.11,<7"
+          echo "PY=$PY" >> "$GITHUB_ENV"
+      - uses: actions/download-artifact@v4
+        with: { name: engine-macos-arm64, path: eng/arm64 }
+      - uses: actions/download-artifact@v4
+        with: { name: engine-macos-x86_64, path: eng/x86_64 }
+      - name: universal engine
+        run: |
+          mkdir -p app/engine
+          for b in colbert colbert-cpu; do
+            lipo -create eng/arm64/$b eng/x86_64/$b -output app/engine/$b
+            chmod +x app/engine/$b
+            echo "$b: $(lipo -archs app/engine/$b)"
+          done
+      - run: COLBERT_TARGET_ARCH=universal2 "$PY" -m PyInstaller --noconfirm app/colbert.spec
+      - name: smoke test (Apple Silicon half; the Intel half is checked on an Intel Mac below)
+        run: |
+          lipo -archs dist/Colbert.app/Contents/MacOS/Colbert
+          dist/Colbert.app/Contents/MacOS/Colbert --version
+          echo "20015 413" > tiny.txt
+          COLBERT_DATA="$RUNNER_TEMP/d" dist/Colbert.app/Contents/MacOS/Colbert --headless --local tiny.txt
+          grep '"result":"PRIME"' "$RUNNER_TEMP/d/engine-results.jsonl"
+      - run: tools/package-macos.sh dist/Colbert.app Colbert-macOS.dmg
+      - uses: actions/upload-artifact@v4
+        with: { name: app-macos, path: Colbert-macOS.dmg }
+
+  app-macos-intel:
+    needs: [app-macos]
+    runs-on: macos-15-intel
+    timeout-minutes: 40
+    steps:
+      - uses: actions/download-artifact@v4
+        with: { name: app-macos }
+      - name: the same download runs on an Intel Mac
+        run: |
+          hdiutil attach -nobrowse -readonly -mountpoint /tmp/colbert-dmg Colbert-macOS.dmg
+          cp -R /tmp/colbert-dmg/Colbert.app "$RUNNER_TEMP/"
+          hdiutil detach /tmp/colbert-dmg
+          A="$RUNNER_TEMP/Colbert.app/Contents/MacOS/Colbert"
+          "$A" --version
+          echo "20015 413" > tiny.txt
+          COLBERT_DATA="$RUNNER_TEMP/d" "$A" --headless --local tiny.txt
+          grep '"result":"PRIME"' "$RUNNER_TEMP/d/engine-results.jsonl"
+
+  app-windows:
+    needs: [engine-windows]
+    runs-on: windows-latest
+    timeout-minutes: 40
+    defaults:
+      run: { shell: pwsh }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - uses: actions/download-artifact@v4
+        with: { name: engine-windows-x64, path: app/engine }
+      - run: pip install "pyinstaller>=6.11,<7"
+      - run: pyinstaller --noconfirm app/colbert.spec
+      - name: smoke test (the packaged app proves a small prime with its own engine)
+        run: |
+          "20015 413" | Out-File -Encoding ascii tiny.txt
+          $d = "$env:RUNNER_TEMP\d"
+          Start-Process -Wait -FilePath dist\Colbert\Colbert.exe -ArgumentList "--headless", "--local", "tiny.txt", "--data", $d
+          Get-Content "$d\logs\app-output.log" -Tail 15
+          if (-not (Select-String -Path "$d\engine-results.jsonl" -Pattern '"result":"PRIME"')) { exit 1 }
+      - name: installer
+        run: |
+          choco install innosetup -y --no-progress
+          $v = python -c "import sys; sys.path.insert(0, 'app'); import colbert_app; print(colbert_app.VERSION)"
+          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" "/DAppVersion=$v" tools\colbert-setup.iss
+          if (-not (Test-Path Colbert-Windows-Setup.exe)) { exit 1 }
+      - name: the installer works without administrator rights, and the installed app starts
+        run: |
+          Start-Process -Wait -FilePath .\Colbert-Windows-Setup.exe -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART"
+          $exe = "$env:LOCALAPPDATA\Programs\Colbert\Colbert.exe"
+          if (-not (Test-Path $exe)) { Get-ChildItem "$env:LOCALAPPDATA\Programs" -Recurse -Depth 1; exit 1 }
+          $d = "$env:RUNNER_TEMP\d2"
+          Start-Process -Wait -FilePath $exe -ArgumentList "--headless", "--local", "tiny.txt", "--data", $d
+          if (-not (Select-String -Path "$d\engine-results.jsonl" -Pattern '"result":"PRIME"')) { exit 1 }
+      - uses: actions/upload-artifact@v4
+        with: { name: app-windows, path: Colbert-Windows-Setup.exe }
+
+  # ------------------------------------------------------------------ release (tags only)
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [ledger, app-linux, app-macos, app-macos-intel, app-windows]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: the tag matches the app's version
+        run: |
+          v=$(python3 -c "import sys; sys.path.insert(0, 'app'); import colbert_app; print(colbert_app.VERSION)")
+          test "${GITHUB_REF_NAME#v}" = "$v" || { echo "tag $GITHUB_REF_NAME but the app says $v"; exit 1; }
+      - uses: actions/download-artifact@v4
+        with: { pattern: "app-*", path: downloads, merge-multiple: true }
+      - run: ls -la downloads
+      - uses: softprops/action-gh-release@v2
+        with:
+          draft: true
+          files: downloads/*
+          body: |
+            ## Download
+
+            | | |
+            |---|---|
+            | **Mac** (Apple Silicon and Intel, macOS 12 or newer) | [Colbert-macOS.dmg](https://github.com/CadeRyan/colbert/releases/latest/download/Colbert-macOS.dmg) |
+            | **Windows** (64-bit, Windows 10 or 11) | [Colbert-Windows-Setup.exe](https://github.com/CadeRyan/colbert/releases/latest/download/Colbert-Windows-Setup.exe) |
+            | **Linux** (x86-64) | [Colbert-Linux-x64.tar.gz](https://github.com/CadeRyan/colbert/releases/latest/download/Colbert-Linux-x64.tar.gz) |
+
+            Colbert opens in your web browser. The first time, it checks each graphics card and the
+            CPU against exact arithmetic (a few minutes), then asks for your name to join the project.
+
+            **The app isn't signed yet**, so the first open needs one extra step:
+            * **Mac:** open the disk image, drag Colbert to Applications, open it. If macOS says it
+              can't check Colbert: System Settings → Privacy & Security → *Open Anyway*.
+            * **Windows:** if SmartScreen says "Windows protected your PC": *More info* → *Run anyway*.
+
+            Details: [docs/APP.md](https://github.com/CadeRyan/colbert/blob/main/docs/APP.md).

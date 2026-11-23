@@ -6,8 +6,30 @@ Linux, with or without a graphics card.
 
 ## Install and open
 
-**From the colbert folder** (a download or `git clone` of the repository), double-click the
-start file for your system:
+**Download** the app for your computer from the
+[latest release](https://github.com/CadeRyan/colbert/releases/latest). No GitHub account is
+needed, and the engine is included, so there's nothing else to install:
+
+| system | download | to install |
+|---|---|---|
+| Mac (Apple Silicon or Intel, macOS 12 or newer) | [Colbert-macOS.dmg](https://github.com/CadeRyan/colbert/releases/latest/download/Colbert-macOS.dmg) | open it, drag Colbert onto Applications, then open Colbert from Applications |
+| Windows 10 or 11 (64-bit) | [Colbert-Windows-Setup.exe](https://github.com/CadeRyan/colbert/releases/latest/download/Colbert-Windows-Setup.exe) | run it. It installs for you only, with no administrator rights, and adds Colbert to the Start menu |
+| Linux (x86-64) | [Colbert-Linux-x64.tar.gz](https://github.com/CadeRyan/colbert/releases/latest/download/Colbert-Linux-x64.tar.gz) | unpack it and run `./Colbert`. A graphics card also needs its OpenCL driver |
+
+The app isn't signed yet, so the first open needs one extra step:
+
+* **Mac:** if macOS says it can't check Colbert for malicious software, open System Settings →
+  Privacy & Security, scroll down, and press *Open Anyway* next to Colbert.
+* **Windows:** if SmartScreen says "Windows protected your PC", press *More info* → *Run anyway*.
+
+Colbert opens in your web browser. That page *is* the app: it only works from this computer,
+and closing the tab doesn't stop the work. Open Colbert again (from Applications or the Start
+menu) to get back to the page; *Quit* in the app saves progress and stops. Once a day the app
+asks GitHub whether a newer version is out, and if so says where to download it. Progress
+carries over to the new version.
+
+**From the source code**, to read or change it, double-click the start file for your system
+in the colbert folder (a download or `git clone` of the repository):
 
 | system | file | first time |
 |---|---|---|
@@ -21,9 +43,6 @@ Closing it, or Quit in the app, saves progress and stops.
 
 The app opens in your web browser. That page *is* the app: it only works from this computer,
 and closing the tab doesn't stop the work. Double-click the start file again to get back to it.
-
-**From a release bundle** (when one is published): unzip and open `Colbert` (`Colbert.exe`
-on Windows). The engine is included, so nothing needs building.
 
 **From a terminal**, the start files do the equivalent of:
 
@@ -104,7 +123,9 @@ project trusts results from computers it has never met. [LEDGER.md](LEDGER.md) e
 details.
 
 **What the project sees:** the name you give, this computer's name (Settings), your
-operating system and device name, the engine version, speeds and results. Nothing else.
+operating system and device name, the engine version, speeds and results. Nothing else. (The
+downloaded app also asks GitHub once a day for the newest version number, which tells GitHub
+your IP address, as any visit to a website does.)
 
 ## If it finds a prime
 
@@ -118,9 +139,11 @@ The app shows a banner. A real discovery would be big news, so:
 
 ## Running without a window
 
-On servers and cloud GPUs:
+On servers and cloud GPUs, from the Linux download (`./Colbert` takes the same options) or a
+source checkout:
 
 ```bash
+python3 app/run.py --headless --owner yourname           # joins the project's ledger
 python3 app/run.py --headless --ledger https://… --owner yourname
 python3 app/run.py --headless --local numbers.txt          # 'k n' per line
 python3 app/run.py --headless --device ocl:0 --threads 8 --data /var/lib/colbert …
@@ -135,13 +158,15 @@ two copies with different `--data` directories and `--device ocl:0` / `--device 
 | | |
 |---|---|
 | data, settings, checkpoints, log | macOS `~/Library/Application Support/Colbert`, Windows `%APPDATA%\Colbert`, Linux `~/.local/share/colbert` (`--data` overrides) |
-| the engine | `engine/` next to the app, or `./colbert` in a source checkout, or Settings → Engine binary |
+| the engine | inside the downloaded app (the Mac app runs a copy of it from its data folder), or `./colbert` in a source checkout, or Settings → Engine binary |
 
 ## Troubleshooting
 
 | symptom | what to do |
 |---|---|
-| "The engine isn't available" | From source: run `make colbert colbert-cpu`, or press *Build it now*. From a release: re-download; the zip includes the engine |
+| "The engine isn't available" | From source: run `make colbert colbert-cpu`, or press *Build it now*. From a download: download and install it again; the engine is included |
+| Mac: "Please move Colbert to your Applications folder first" | it was opened from the disk image or from Downloads. Drag it onto Applications and open it from there |
+| Mac: "Colbert couldn't start" | the message names a log file; its last lines say why |
 | a device shows *failed* on the Devices tab | that device computes wrong answers with this engine build (often a driver problem). It won't be used. Try a driver update, then *Check all devices again* |
 | no graphics card listed | install your GPU's OpenCL driver (SETUP.md). Without one, the CPU engine is used |
 | "errors corrected" goes up often | the hardware is unstable, often heat or overclocking. Results are still right; the check exists for this |

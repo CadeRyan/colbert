@@ -24,12 +24,13 @@ import socket
 import subprocess
 import threading
 import time
-from typing import Any, Dict, List, Optional
+import urllib.request
+from typing import Any, Dict, List, Optional, Tuple
 
-from . import PROJECT_LEDGER_URL, VERSION
+from . import DOWNLOAD_PAGE, PROJECT_LEDGER_URL, RELEASES_API, VERSION
 from .engine import Engine, EngineError, choose_gerbicz, kill_pid, process_alive, split_args
 from .ledger_client import LedgerClient, LedgerRefused, LedgerUnavailable
-from .paths import can_build_from_source, engine_candidates, repo_root
+from .paths import FROZEN, can_build_from_source, engine_candidates, repo_root
 
 DEFAULT_LEDGER_URL = os.environ.get("COLBERT_LEDGER_URL", "") or PROJECT_LEDGER_URL
 BENCH_K, BENCH_N = 21181, 47856020        # the leading edge; what ledger work looks like
@@ -150,6 +151,7 @@ class Worker:
         self.project: Dict[str, Any] = {}
         self.ledger_note = ""
         self.ledger_cfg: Dict[str, Any] = {}         # the ledger's public config (pm1, sieve_bits, ...)
+        self.update: Optional[Dict[str, str]] = None   # a newer release of the app, if there is one
         self.prime_alert = self.state.get("prime_alert")
         self.next_upload = 0.0
         self.quit_event = threading.Event()
@@ -281,7 +283,7 @@ class Worker:
 
     def load_engine(self):
         errors = []
-        for p in engine_candidates(self.settings.get("engine_path", "")):
+        for p in engine_candidates(self.settings.get("engine_path", ""), self.dir):
             try:
                 stamp = self._stamp(p)
                 e = Engine(p).probe()
@@ -920,6 +922,7 @@ class Worker:
         self.save()
 
     def _poll_project(self):
+        last_update_check = 0.0
         while not self.quit_event.is_set():
             if self.settings["mode"] == "ledger" and self.settings.get("ledger_url"):
                 try:
@@ -927,7 +930,24 @@ class Worker:
                     self.project["_at"] = time.time()
                 except (LedgerUnavailable, LedgerRefused) as e:
                     self.project = dict(self.project, _error=str(e))
+            if FROZEN and time.time() - last_update_check >= 86400:
+                last_update_check = time.time()
+                self._check_update()
             self.quit_event.wait(600)
+
+    def _check_update(self):
+        """Downloaded app: is there a newer release? (Source checkouts update with git.)"""
+        try:
+            req = urllib.request.Request(RELEASES_API, headers={"Accept": "application/vnd.github+json",
+                                                                 "User-Agent": "colbert-app/" + VERSION})
+            with urllib.request.urlopen(req, timeout=30) as r:
+                latest = str(json.loads(r.read()).get("tag_name", "")).lstrip("v")
+        except (OSError, ValueError, AttributeError):
+            return                                   # offline, rate-limited, no release yet: try tomorrow
+        newer = _version_tuple(latest) > _version_tuple(VERSION)
+        if newer and (not self.update or self.update["version"] != latest):
+            self.log("Colbert %s is available (this is %s): %s" % (latest, VERSION, DOWNLOAD_PAGE))
+        self.update = {"version": latest, "url": DOWNLOAD_PAGE} if newer else None
 
     # ------------------------------------------------------------------ user actions (web/CLI threads)
 
@@ -1100,7 +1120,7 @@ class Worker:
                 "devices": devs, "validation": dict(self.validation),
                 "settings": self.public_settings(), "queue": self.state["queue"][:200], "queue_len": len(self.state["queue"]),
                 "history": list(reversed(self.state["history"][-100:])), "pending_uploads": len(self.state["pending"]),
-                "project": {k: v for k, v in self.project.items()}, "ledger_note": self.ledger_note,
+                "project": {k: v for k, v in self.project.items()}, "ledger_note": self.ledger_note, "update": self.update,
                 "log": list(self.logbuf)[-300:], "prime_alert": self.prime_alert, "known_prime": list(KNOWN_PRIME),
             }
 
@@ -1114,3 +1134,9 @@ def _dur(s: float) -> str:
     if s < 172800:
         return "%.1f h" % (s / 3600)
     return "%.1f days" % (s / 86400)
+
+
+def _version_tuple(v: str) -> Tuple[int, ...]:
+    """'0.10.2' -> (0, 10, 2); anything that isn't plain numbers -> () (never "newer")."""
+    parts = (v or "").strip().split(".")
+    return tuple(int(p) for p in parts) if parts and all(p.isdigit() for p in parts) else ()

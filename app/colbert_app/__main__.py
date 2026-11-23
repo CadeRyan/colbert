@@ -18,17 +18,25 @@ from __future__ import annotations
 import argparse
 import os
 import signal
+import subprocess
 import sys
 import threading
 import time
 import webbrowser
 
 from . import VERSION
-from .paths import data_dir
-from .worker import AlreadyRunning, Worker, _dur
+from .paths import FROZEN, MAC_APP, data_dir
+from .worker import AlreadyRunning, SingleInstance, Worker, _dur
 
 
 def main(argv=None):
+    # A downloaded app started by double-click may have no console at all (Windows: stdout and
+    # stderr are None). Give everything, argparse included, somewhere harmless to write until
+    # the data folder is known; from then on output goes to a log file there.
+    no_console = sys.stdout is None or sys.stderr is None
+    if no_console:
+        null = open(os.devnull, "w")
+        sys.stdout, sys.stderr = sys.stdout or null, sys.stderr or null
     ap = argparse.ArgumentParser(prog="colbert-app", description="Colbert: Proth tests for the Sierpinski problem")
     ap.add_argument("--data", default="")
     ap.add_argument("--port", type=int, default=0)
@@ -41,9 +49,23 @@ def main(argv=None):
     ap.add_argument("--device", default="")
     ap.add_argument("--threads", type=int, default=-1)
     ap.add_argument("--version", action="version", version="colbert-app " + VERSION)
+    ap.add_argument("--serve", action="store_true", help=argparse.SUPPRESS)   # the macOS app's background process
     a = ap.parse_args(argv)
 
     d = data_dir(a.data)
+    _keep_output(d, no_console)
+    if FROZEN and sys.platform.startswith("linux"):
+        # PyInstaller points LD_LIBRARY_PATH at the app's own libraries. The engine, a child
+        # process, must load the system's (and the libgomp beside it, through its rpath).
+        orig = os.environ.pop("LD_LIBRARY_PATH_ORIG", None)
+        if orig is not None:
+            os.environ["LD_LIBRARY_PATH"] = orig
+        else:
+            os.environ.pop("LD_LIBRARY_PATH", None)
+    if MAC_APP and not (a.headless or a.serve):
+        return mac_launch(d)
+    if a.serve:
+        a.no_browser = True                     # the launcher opens the page
     try:
         w = Worker(d, headless=a.headless)
     except AlreadyRunning:
@@ -141,6 +163,76 @@ def _read(p):
             return f.read().strip()
     except OSError:
         return ""
+
+
+def _keep_output(d: str, no_console: bool):
+    """No console: send output to a log file in the data folder instead of losing it."""
+    os.makedirs(os.path.join(d, "logs"), exist_ok=True)
+    if no_console:
+        f = open(os.path.join(d, "logs", "app-output.log"), "a", buffering=1, encoding="utf-8", errors="replace")
+        sys.stdout = sys.stderr = f
+
+
+# ---------------------------------------------------------------------------- macOS app
+
+def mac_launch(d: str):
+    """Colbert.app was opened from Finder, the Dock or Launchpad.
+
+    macOS doesn't start an app that is already running, it only brings it to the front, and
+    this app has no window to bring forward. So the app itself is just a launcher: the first
+    time, it starts the worker as a separate background process; every time, it opens the
+    page in the browser and exits. Opening Colbert again therefore always lands here."""
+    exe = os.path.realpath(sys.executable)
+    if "/AppTranslocation/" in exe or exe.startswith("/Volumes/"):
+        # running from the disk image, or straight from Downloads: macOS runs such apps from
+        # a temporary read-only copy that can vanish under a long-running worker
+        _mac_alert("Please move Colbert to your Applications folder first.",
+                   "Drag Colbert into Applications, then open it from there. It keeps working in the "
+                   "background for days at a time, so it needs a permanent place.")
+        return
+    url_file = os.path.join(d, "app.url")
+    try:
+        probe = SingleInstance(os.path.join(d, "app.lock"))
+    except AlreadyRunning:
+        return _mac_open(_wait_for(url_file, None, 30), d)
+    probe.f.close()                              # free the lock for the worker
+    try:
+        os.remove(url_file)
+    except OSError:
+        pass
+    log = open(os.path.join(d, "logs", "app-output.log"), "ab")
+    proc = subprocess.Popen([exe, "--serve", "--data", d], stdin=subprocess.DEVNULL, stdout=log,
+                            stderr=subprocess.STDOUT, start_new_session=True, close_fds=True)
+    _mac_open(_wait_for(url_file, proc, 90), d)
+
+
+def _wait_for(url_file: str, proc, seconds: float) -> str:
+    deadline = time.time() + seconds
+    while time.time() < deadline:
+        url = _read(url_file)
+        if url:
+            return url
+        if proc is not None and proc.poll() is not None:
+            break                                # the worker exited: it says why in the log
+        time.sleep(0.25)
+    return ""
+
+
+def _mac_open(url: str, d: str):
+    if url and os.environ.get("COLBERT_NO_BROWSER"):
+        print("Colbert is running at %s" % url, flush=True)       # tests and remote sessions
+    elif url:
+        subprocess.run(["open", url], check=False)
+    else:
+        _mac_alert("Colbert couldn't start.", "What went wrong is at the end of this file:\n" +
+                   os.path.join(d, "logs", "app-output.log"))
+
+
+def _mac_alert(title: str, text: str):
+    msg = (title + "\n\n" + text).replace("\\", "\\\\").replace('"', '\\"')
+    subprocess.run(["osascript", "-e", 'display dialog "%s" with title "Colbert" buttons {"OK"} '
+                                       'default button "OK" with icon caution giving up after 600' % msg], check=False,
+                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 
 if __name__ == "__main__":

@@ -35,6 +35,18 @@ ifeq ($(UNAME),Darwin)
     LIBS = -L$(BREW)/opt/gmp/lib -lgmpxx -lgmp $(OMPLIB)
   endif
   OCLLIB = -framework OpenCL
+else ifeq ($(UNAME),Linux)
+  OMPFLAGS = -fopenmp
+  OCLLIB = -lOpenCL
+  ifeq ($(STATIC),1)
+    # release build that runs on other distributions: GMP and the C++ runtime are linked in;
+    # libgomp.so.1 travels next to the binary (found through rpath $ORIGIN); the OpenCL loader
+    # stays a system library (without it the app falls back to colbert-cpu)
+    LIBS = $(shell $(CXX) -print-file-name=libgmpxx.a) $(shell $(CXX) -print-file-name=libgmp.a)
+    LDFLAGS += -static-libstdc++ -static-libgcc -Wl,-rpath,'$$ORIGIN'
+  else
+    LIBS = -lgmpxx -lgmp
+  endif
 else
   OMPFLAGS = -fopenmp
   LIBS = -lgmpxx -lgmp

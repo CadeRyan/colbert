@@ -5,6 +5,13 @@ Sierpiński problem: `k·2^n + 1` for `k` = 21181, 22699, 24737, 55459, 67607.
 
 **New here?** Start with [the plain-language explainer](docs/EXPLAINER.md).
 
+**Want to help?** Download the app for
+[Mac](https://github.com/CadeRyan/colbert/releases/latest/download/Colbert-macOS.dmg),
+[Windows](https://github.com/CadeRyan/colbert/releases/latest/download/Colbert-Windows-Setup.exe) or
+[Linux](https://github.com/CadeRyan/colbert/releases/latest/download/Colbert-Linux-x64.tar.gz),
+open it, and give your name. It tests numbers for the project on your graphics card or CPU
+([how it works](docs/APP.md)).
+
 ## The idea
 
 Graphics cards are fast at whole-number arithmetic and slow at the double-precision

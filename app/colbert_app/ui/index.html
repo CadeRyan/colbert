@@ -320,6 +320,8 @@ function renderAlerts() {
   if (!S.engine) h += `<div class="alert bad"><b>The engine isn't available</b>${esc(S.engine_error)}${S.can_build ?
      ' <button class="small" onclick="build()">Build it now</button>' : ""}</div>`;
   if (S.ledger_note) h += `<div class="alert good"><b>Message from the project</b>${esc(S.ledger_note)}</div>`;
+  if (S.update) h += `<div class="alert good"><b>Colbert ${esc(S.update.version)} is available</b>You have ${esc(S.app_version)}.
+    <a href="${esc(S.update.url)}" target="_blank" rel="noopener">Download it</a>, quit this version, and open the new one: your progress carries over.</div>`;
   if (S.pending_uploads) h += `<div class="alert warn"><b>${S.pending_uploads} result(s) waiting to upload</b>They are saved and will be sent when the ledger is reachable.</div>`;
   $("alerts").innerHTML = h;
 }
