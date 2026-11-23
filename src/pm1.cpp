@@ -53,7 +53,7 @@ static u64 primeCount(u64 lo, u64 hi) { PrimeRange r(lo, hi); u64 q, c = 0; whil
 // E = prod p^floor(log_p B1), by a product tree
 static mpz_class stage1Exponent(u64 B1) {
   std::vector<mpz_class> v;
-  for (u32 p : smallPrimes((u32)B1)) { u64 q = p; while (q <= B1 / p) q *= p; v.push_back(mpz_class((unsigned long)q)); }
+  for (u32 p : smallPrimes((u32)B1)) { u64 q = p; while (q <= B1 / p) q *= p; v.push_back(mpzFromU64(q)); }
   if (v.empty()) return 1;
   while (v.size() > 1) {
     std::vector<mpz_class> w((v.size() + 1) / 2);

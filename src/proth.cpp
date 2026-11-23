@@ -187,7 +187,7 @@ ProthResult prothTest(Engine& e, const ProthOptions& opt) {
   mpz_class xf = toMpz(L, f1);
   mpz_class y = (xf * L.k) % P;                      // ordinary residue a^((P-1)/2)
   R.prime = (y == P - 1);
-  R.res64 = mpz_class(y & mpz_class("18446744073709551615")).get_ui();
+  R.res64 = low64(y);
   R.iterations = total; R.seconds = now() - t0;
   return R;
 }

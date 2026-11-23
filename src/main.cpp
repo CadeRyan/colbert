@@ -142,7 +142,7 @@ static int selftest(const Args& a) {
     mpz_class P = modulus(e->layout()), y, ex = (P - 1) / 2, base = r.base;
     mpz_powm(y.get_mpz_t(), base.get_mpz_t(), ex.get_mpz_t(), P.get_mpz_t());
     bool want = y == P - 1;
-    u64 wres = mpz_class(y & mpz_class("18446744073709551615")).get_ui();
+    u64 wres = low64(y);
     bool ok = want == r.prime && wres == r.res64 && r.rollbacks == 0;
     cases++; if (!ok) fails++;
     report(ok, "proth k=%u n=%llu base=%u -> %s res64=%016llx (gmp %016llx) checks=%llu", c.k, (unsigned long long)c.n, r.base,
@@ -158,7 +158,7 @@ static int selftest(const Args& a) {
     ProthResult r = prothTest(*e, o);
     mpz_class P = modulus(e->layout()), y, ex = (P - 1) / 2, base = r.base;
     mpz_powm(y.get_mpz_t(), base.get_mpz_t(), ex.get_mpz_t(), P.get_mpz_t());
-    u64 wres = mpz_class(y & mpz_class("18446744073709551615")).get_ui();
+    u64 wres = low64(y);
     bool ok = fired && r.rollbacks == 1 && wres == r.res64;
     cases++; if (!ok) fails++;
     report(ok, "fault injection: rollbacks=%llu, final residue %s", (unsigned long long)r.rollbacks, wres == r.res64 ? "correct" : "WRONG");
@@ -178,17 +178,17 @@ static int selftest(const Args& a) {
       Pm1Result r = pm1Run(*e, o);
       const Layout& L = e->layout();
       mpz_class P = modulus(L), E = 1, y;
-      for (u64 p = 2; p <= c.B1; p++) { bool pr = true; for (u64 d = 2; d * d <= p; d++) if (p % d == 0) { pr = false; break; } if (!pr) continue; u64 q = p; while (q <= c.B1 / p) q *= p; E *= (unsigned long)q; }
+      for (u64 p = 2; p <= c.B1; p++) { bool pr = true; for (u64 d = 2; d * d <= p; d++) if (p % d == 0) { pr = false; break; } if (!pr) continue; u64 q = p; while (q <= c.B1 / p) q *= p; E *= mpzFromU64(q); }
       mpz_class three = 3; mpz_powm(y.get_mpz_t(), three.get_mpz_t(), E.get_mpz_t(), P.get_mpz_t());
       bool ok = r.y == y && r.stage == c.stage;
       if (c.factor[0]) ok = ok && r.factor == c.factor;
       else ok = ok && r.factor.empty();
       if (r.stage != 1 && c.B2 > c.B1 && r.D) {      // the stage-2 product itself
-        mpz_class acc = 1, yD, ym, yr; mpz_class Dz = (unsigned long)r.D;
+        mpz_class acc = 1, yD, ym, yr; mpz_class Dz = mpzFromU64(r.D);
         for (u64 q = c.B1 + 1; q <= c.B2; q++) {
           bool pr = q > 1; for (u64 d = 2; d * d <= q; d++) if (q % d == 0) { pr = false; break; } if (!pr) continue;
           u64 m = q / r.D + 1, rr = m * r.D - q;
-          mpz_class me = (unsigned long)(m * r.D), re = (unsigned long)rr;
+          mpz_class me = mpzFromU64(m * r.D), re = mpzFromU64(rr);
           mpz_powm(ym.get_mpz_t(), y.get_mpz_t(), me.get_mpz_t(), P.get_mpz_t()); mpz_powm(yr.get_mpz_t(), y.get_mpz_t(), re.get_mpz_t(), P.get_mpz_t());
           acc = acc * (ym - yr) % P;
         }
